@@ -102,9 +102,69 @@ func BenchmarkDecodeMinimal(b *testing.B) {
 		b.Fatalf("New failed: %v", err)
 	}
 	br := &bitReader{}
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		br.Reset()
 		_ = e.Decode(br, config)
+	}
+}
+
+func BenchmarkApplyIndependentCoupling(b *testing.B) {
+	config := testConfig()
+	e, err := New(config)
+	if err != nil {
+		b.Fatalf("New failed: %v", err)
+	}
+	data := make([]float32, 1024)
+	e.ICS.Data = make([]float32, 1024)
+	for i := range e.ICS.Data {
+		e.ICS.Data[i] = float32(i % 100)
+	}
+	e.Gain = [][]float32{make([]float32, 1)}
+	e.Gain[0][0] = 2
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = e.ApplyIndependentCoupling(0, data)
+	}
+}
+
+func BenchmarkApplyDependentCoupling(b *testing.B) {
+	config := testConfig()
+	e, err := New(config)
+	if err != nil {
+		b.Fatalf("New failed: %v", err)
+	}
+	info := e.ICS.Info
+	info.GroupCount = 1
+	info.GroupLength[0] = 1
+	info.MaxSFB = 10
+	info.SwbOffsets = make([]int, 11)
+	for i := range info.SwbOffsets {
+		info.SwbOffsets[i] = i * 10
+	}
+	info.SwbCount = 10
+
+	for i := range e.ICS.BandTypes {
+		e.ICS.BandTypes[i] = 1
+	}
+	e.ICS.Data = make([]float32, 1024)
+	for i := range e.ICS.Data {
+		e.ICS.Data[i] = 1.0
+	}
+	data := make([]float32, 1024)
+	for i := range data {
+		data[i] = 10.0
+	}
+
+	e.Gain = [][]float32{make([]float32, maxGainBands)}
+	for i := range e.Gain[0] {
+		e.Gain[0][i] = 0.5
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = e.ApplyDependentCoupling(0, data)
 	}
 }
 

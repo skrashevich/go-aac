@@ -4,6 +4,9 @@ import (
 	"math"
 	"testing"
 
+	"github.com/skrashevich/go-aac/pkg/adts"
+	"github.com/skrashevich/go-aac/pkg/cpe"
+	"github.com/skrashevich/go-aac/pkg/filterbank"
 	"github.com/skrashevich/go-aac/pkg/ics"
 )
 
@@ -759,4 +762,386 @@ func buildADTSHeader(profile, sampleIndex, chanConfig int, protectionAbsent bool
 		w.write(16, 0)
 	}
 	return w.bytes()
+}
+
+// ---------------------------------------------------------------------------
+// Internal function coverage tests
+// ---------------------------------------------------------------------------
+
+func TestProcessIS(t *testing.T) {
+	dec := New()
+	asc := buildASC(2, 4, 2)
+	if err := dec.SetASC(asc); err != nil {
+		t.Fatalf("SetASC failed: %v", err)
+	}
+
+	// Create a minimal CPE element structure for testing
+	element := &cpe.Element{
+		CommonWindow: true,
+		MaskPresent:  true,
+		MSUsed:       make([]bool, 120),
+		Left: &ics.ICStream{
+			Info: &ics.ICSInfo{
+				GroupCount:   1,
+				GroupLength:  []int{1, 0, 0, 0, 0, 0, 0, 0},
+				MaxSFB:       2,
+				SwbOffsets:   []int{0, 8, 16},
+			},
+			BandTypes: make([]int, 120),
+			SectEnd:   []int{1, 2},
+			Data:      make([]float32, 1024),
+		},
+		Right: &ics.ICStream{
+			Info: &ics.ICSInfo{
+				GroupCount:   1,
+				GroupLength:  []int{1, 0, 0, 0, 0, 0, 0, 0},
+				MaxSFB:       2,
+				SwbOffsets:   []int{0, 8, 16},
+			},
+			BandTypes:    []int{ics.IntensityBT, ics.IntensityBT2},
+			SectEnd:      []int{1, 2},
+			ScaleFactors: []float32{0.5, 0.3},
+			Data:         make([]float32, 1024),
+		},
+	}
+
+	left := element.Left.Data
+	right := element.Right.Data
+	for i := range left {
+		left[i] = 1.0
+	}
+	element.MSUsed[0] = true
+
+	dec.processIS(element, left, right)
+
+	// Verify that intensity stereo was applied
+	if right[0] == 0 {
+		t.Error("intensity stereo should have modified right channel")
+	}
+}
+
+func TestProcessMS(t *testing.T) {
+	dec := New()
+	asc := buildASC(2, 4, 2)
+	if err := dec.SetASC(asc); err != nil {
+		t.Fatalf("SetASC failed: %v", err)
+	}
+
+	element := &cpe.Element{
+		CommonWindow: true,
+		MaskPresent:  true,
+		MSUsed:       make([]bool, 120),
+		Left: &ics.ICStream{
+			Info: &ics.ICSInfo{
+				GroupCount:   1,
+				GroupLength:  []int{1, 0, 0, 0, 0, 0, 0, 0},
+				MaxSFB:       2,
+				SwbOffsets:   []int{0, 8, 16},
+			},
+			BandTypes: []int{1, 2},
+			Data:      make([]float32, 1024),
+		},
+		Right: &ics.ICStream{
+			BandTypes: []int{1, 2},
+			Data:      make([]float32, 1024),
+		},
+	}
+
+	left := element.Left.Data
+	right := element.Right.Data
+	for i := 0; i < 16; i++ {
+		left[i] = 2.0
+		right[i] = 1.0
+	}
+	element.MSUsed[0] = true
+
+	dec.processMS(element, left, right)
+
+	// Verify M/S decoding: left = mid+side, right = mid-side
+	// After M/S: left should be 3.0, right should be 1.0
+	if left[0] != 3.0 {
+		t.Errorf("left[0] = %f, want 3.0", left[0])
+	}
+	if right[0] != 1.0 {
+		t.Errorf("right[0] = %f, want 1.0", right[0])
+	}
+}
+
+func TestProcessSingleAACMain(t *testing.T) {
+	dec := New()
+	dec.Config = Config{
+		Profile:     aotAACMain,
+		SampleIndex: 4,
+		SampleRate:  44100,
+		ChanConfig:  1,
+		FrameLength: 1024,
+	}
+	fb, _ := filterbank.New(false, 1)
+	dec.FilterBank = fb
+	dec.Data = [][]float32{make([]float32, 1024)}
+
+	element := &ics.ICStream{
+		Info: &ics.ICSInfo{
+			WindowSequence: 0,
+			WindowShape:    [2]int{0, 0},
+		},
+		Data: make([]float32, 1024),
+	}
+
+	_, err := dec.processSingle(0, element, 0)
+	if err == nil {
+		t.Error("expected error for AAC Main profile prediction")
+	}
+}
+
+func TestProcessSingleAACLTP(t *testing.T) {
+	dec := New()
+	dec.Config = Config{
+		Profile:     aotAACLTP,
+		SampleIndex: 4,
+		SampleRate:  44100,
+		ChanConfig:  1,
+		FrameLength: 1024,
+	}
+	fb, _ := filterbank.New(false, 1)
+	dec.FilterBank = fb
+	dec.Data = [][]float32{make([]float32, 1024)}
+
+	element := &ics.ICStream{
+		Info: &ics.ICSInfo{
+			WindowSequence: 0,
+			WindowShape:    [2]int{0, 0},
+		},
+		Data: make([]float32, 1024),
+	}
+
+	_, err := dec.processSingle(0, element, 0)
+	if err == nil {
+		t.Error("expected error for AAC LTP profile")
+	}
+}
+
+func TestProcessSingleGainPresent(t *testing.T) {
+	dec := New()
+	dec.Config = Config{
+		Profile:     aotAACLC,
+		SampleIndex: 4,
+		SampleRate:  44100,
+		ChanConfig:  1,
+		FrameLength: 1024,
+	}
+	fb, _ := filterbank.New(false, 1)
+	dec.FilterBank = fb
+	dec.Data = [][]float32{make([]float32, 1024)}
+
+	element := &ics.ICStream{
+		Info: &ics.ICSInfo{
+			WindowSequence: 0,
+			WindowShape:    [2]int{0, 0},
+		},
+		Data:        make([]float32, 1024),
+		GainPresent: true,
+	}
+
+	_, err := dec.processSingle(0, element, 0)
+	if err == nil {
+		t.Error("expected error for gain control")
+	}
+}
+
+func TestProcessSingleSBRPresent(t *testing.T) {
+	dec := New()
+	dec.Config = Config{
+		Profile:     aotAACLC,
+		SampleIndex: 4,
+		SampleRate:  44100,
+		ChanConfig:  1,
+		FrameLength: 1024,
+	}
+	fb, _ := filterbank.New(false, 1)
+	dec.FilterBank = fb
+	dec.Data = [][]float32{make([]float32, 1024)}
+	dec.SBRPresent = true
+
+	element := &ics.ICStream{
+		Info: &ics.ICSInfo{
+			WindowSequence: 0,
+			WindowShape:    [2]int{0, 0},
+		},
+		Data: make([]float32, 1024),
+	}
+
+	_, err := dec.processSingle(0, element, 0)
+	if err == nil {
+		t.Error("expected error for SBR")
+	}
+}
+
+func TestProcessPairAACMain(t *testing.T) {
+	dec := New()
+	dec.Config = Config{
+		Profile:     aotAACMain,
+		SampleIndex: 4,
+		SampleRate:  44100,
+		ChanConfig:  2,
+		FrameLength: 1024,
+	}
+	fb, _ := filterbank.New(false, 2)
+	dec.FilterBank = fb
+	dec.Data = [][]float32{make([]float32, 1024), make([]float32, 1024)}
+
+	element := &cpe.Element{
+		Left: &ics.ICStream{
+			Info: &ics.ICSInfo{
+				WindowSequence: 0,
+				WindowShape:    [2]int{0, 0},
+			},
+			Data: make([]float32, 1024),
+		},
+		Right: &ics.ICStream{
+			Info: &ics.ICSInfo{
+				WindowSequence: 0,
+				WindowShape:    [2]int{0, 0},
+			},
+			Data: make([]float32, 1024),
+		},
+	}
+
+	err := dec.processPair(0, element, 0)
+	if err == nil {
+		t.Error("expected error for AAC Main profile in pair")
+	}
+}
+
+func TestProcessPairAACLTP(t *testing.T) {
+	dec := New()
+	dec.Config = Config{
+		Profile:     aotAACLTP,
+		SampleIndex: 4,
+		SampleRate:  44100,
+		ChanConfig:  2,
+		FrameLength: 1024,
+	}
+	fb, _ := filterbank.New(false, 2)
+	dec.FilterBank = fb
+	dec.Data = [][]float32{make([]float32, 1024), make([]float32, 1024)}
+
+	element := &cpe.Element{
+		Left: &ics.ICStream{
+			Info: &ics.ICSInfo{
+				WindowSequence: 0,
+				WindowShape:    [2]int{0, 0},
+			},
+			Data: make([]float32, 1024),
+		},
+		Right: &ics.ICStream{
+			Info: &ics.ICSInfo{
+				WindowSequence: 0,
+				WindowShape:    [2]int{0, 0},
+			},
+			Data: make([]float32, 1024),
+		},
+	}
+
+	err := dec.processPair(0, element, 0)
+	if err == nil {
+		t.Error("expected error for AAC LTP profile in pair")
+	}
+}
+
+func TestSetConfigFromADTSInvalidSampleIndex(t *testing.T) {
+	dec := New()
+	header := adts.Header{
+		Profile:       2,
+		SamplingIndex: 99, // invalid
+		ChannelConfig: 2,
+	}
+	err := dec.setConfigFromADTS(header)
+	if err == nil {
+		t.Error("expected error for invalid sample index in ADTS")
+	}
+}
+
+func TestSetConfigFromADTSUnsupportedProfile(t *testing.T) {
+	dec := New()
+	header := adts.Header{
+		Profile:       5, // unsupported
+		SamplingIndex: 4,
+		ChannelConfig: 2,
+	}
+	err := dec.setConfigFromADTS(header)
+	if err == nil {
+		t.Error("expected error for unsupported profile in ADTS")
+	}
+}
+
+func TestSetConfigFromADTSPCE(t *testing.T) {
+	dec := New()
+	header := adts.Header{
+		Profile:       2,
+		SamplingIndex: 4,
+		ChannelConfig: 0, // PCE
+	}
+	err := dec.setConfigFromADTS(header)
+	if err == nil {
+		t.Error("expected error for PCE in ADTS")
+	}
+}
+
+func TestSetASCCustomSampleRate(t *testing.T) {
+	dec := New()
+	w := newBitWriter()
+	w.write(5, 2)         // profile AAC-LC
+	w.write(4, 0x0f)      // sample index = 15 (custom)
+	w.write(24, 44100)    // custom sample rate
+	w.write(4, 2)         // chan config
+	w.write(1, 0)         // frameLengthFlag
+	w.write(1, 0)         // dependsOnCoreCoder
+	w.write(1, 0)         // extensionFlag
+
+	if err := dec.SetASC(w.bytes()); err != nil {
+		t.Fatalf("SetASC with custom sample rate failed: %v", err)
+	}
+	if dec.Config.SampleRate != 44100 {
+		t.Errorf("SampleRate=%d want 44100", dec.Config.SampleRate)
+	}
+	if dec.Config.SampleIndex != 4 {
+		t.Errorf("SampleIndex=%d want 4", dec.Config.SampleIndex)
+	}
+}
+
+func TestSetASCInvalidSampleIndex(t *testing.T) {
+	dec := New()
+	w := newBitWriter()
+	w.write(5, 2)         // profile AAC-LC
+	w.write(4, 14)        // sample index = 14 (invalid, not 15 and out of range)
+	w.write(4, 2)         // chan config
+	w.write(1, 0)         // frameLengthFlag
+	w.write(1, 0)         // dependsOnCoreCoder
+	w.write(1, 0)         // extensionFlag
+
+	if err := dec.SetASC(w.bytes()); err == nil {
+		t.Error("expected error for invalid sample index")
+	}
+}
+
+func TestSetASCExtensionFlagHighProfile(t *testing.T) {
+	dec := New()
+	w := newBitWriter()
+	w.write(5, 31)        // profile escape
+	w.write(6, 1)         // extended profile = 32+1=33 (> 16)
+	w.write(4, 4)         // sample index
+	w.write(4, 2)         // chan config
+	w.write(1, 0)         // frameLengthFlag
+	w.write(1, 0)         // dependsOnCoreCoder
+	w.write(1, 1)         // extensionFlag=1
+	w.write(1, 1)         // sectionDataResilience
+	w.write(1, 1)         // scalefactorResilience
+	w.write(1, 1)         // spectralDataResilience
+	w.write(1, 0)         // extensionFlag3
+
+	// Profile 33 is not supported, should error
+	if err := dec.SetASC(w.bytes()); err == nil {
+		t.Error("expected error for unsupported profile 33")
+	}
 }

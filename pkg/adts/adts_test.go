@@ -86,9 +86,48 @@ func BenchmarkReadHeader(b *testing.B) {
 	bits.write(2, 0)
 	data := bits.bytes()
 
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		reader := NewBitReader(data)
 		_, _ = ReadHeader(reader)
+	}
+}
+
+func BenchmarkProbe(b *testing.B) {
+	data := []byte{0x00, 0x11, 0x22, 0xff, 0xf1, 0x33, 0x44, 0x55}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = Probe(data)
+	}
+}
+
+func BenchmarkReadHeaderFromBytes(b *testing.B) {
+	bits := newBitWriter()
+	bits.write(12, 0xfff)
+	bits.write(1, 0)
+	bits.write(2, 0)
+	bits.write(1, 1)
+	bits.write(2, 1)
+	bits.write(4, 4)
+	bits.write(1, 0)
+	bits.write(3, 2)
+	bits.write(4, 0)
+	bits.write(13, 100)
+	bits.write(11, 0)
+	bits.write(2, 0)
+	data := bits.bytes()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ReadHeaderFromBytes(data)
+	}
+}
+
+func BenchmarkAudioSpecificConfig(b *testing.B) {
+	header := Header{Profile: 2, SamplingIndex: 4, ChannelConfig: 2}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = AudioSpecificConfig(header)
 	}
 }
 

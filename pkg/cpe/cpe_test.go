@@ -107,6 +107,28 @@ func BenchmarkDecodeNoCommonWindow(b *testing.B) {
 		b.Fatalf("New failed: %v", err)
 	}
 	br := &bitReader{}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		br.Reset()
+		_ = e.Decode(br, config)
+	}
+}
+
+func BenchmarkDecodeCommonWindow(b *testing.B) {
+	config := testConfig()
+	e, err := New(config)
+	if err != nil {
+		b.Fatalf("New failed: %v", err)
+	}
+	bits := []uint8{
+		1,
+		0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0,
+		0,
+		1, 0,
+	}
+	br := &bitReader{bits: bits}
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		br.Reset()
 		_ = e.Decode(br, config)
