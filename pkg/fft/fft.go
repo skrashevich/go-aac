@@ -1,10 +1,10 @@
 // Package fft implements the Fast Fourier Transform used internally by
 // the AAC decoder's MDCT stage.
 //
-// Supported transform lengths are 64, 512, 60, and 480. These correspond
-// to the four MDCT block sizes used in AAC (256, 2048, 240, 1920) divided
-// by 4. The implementation uses a radix-4 decimation-in-time algorithm
-// with bit-reversal permutation.
+// Supported transform lengths are 64, 512, 256, 60, 480, and 240. These
+// correspond to the MDCT block sizes used in AAC (256, 2048, 1024, 128, 240,
+// 1920, 960, 120) divided by 4. The implementation uses a radix-4
+// decimation-in-time algorithm with bit-reversal permutation.
 //
 // This is a direct port of the FFT module from AAC.js by Devon Govett
 // (LGPL v3).
@@ -17,7 +17,7 @@ import (
 
 // FFT performs forward or inverse FFT of a specific length.
 //
-// Supported lengths: 64, 512, 60, 480.
+// Supported lengths: 64, 512, 256, 60, 480, 240.
 //
 // Example usage:
 //
@@ -46,9 +46,9 @@ type FFT struct {
 
 // New creates a new FFT processor for the given transform length.
 //
-// Supported lengths are 64, 512, 60, and 480. These are the only sizes
-// required by the AAC decoder's MDCT module (MDCT lengths 256, 2048, 240,
-// 1920 each use N/4 as the FFT length).
+// Supported lengths are 64, 512, 256, 60, 480, and 240. These are the only
+// sizes required by the AAC decoder's MDCT module (MDCT lengths 256, 2048,
+// 240, 1920, 1024, 128, 960, 120 each use N/4 as the FFT length).
 //
 // Returns an error if an unsupported length is provided.
 func New(length int) (*FFT, error) {
@@ -61,12 +61,16 @@ func New(length int) (*FFT, error) {
 		f.roots = generateTableShort(64)
 	case 512:
 		f.roots = generateTableLong(512)
+	case 256:
+		f.roots = generateTableLong(256)
 	case 60:
 		f.roots = generateTableShort(60)
 	case 480:
 		f.roots = generateTableLong(480)
+	case 240:
+		f.roots = generateTableShort(240)
 	default:
-		return nil, fmt.Errorf("fft: unsupported length %d (supported: 64, 512, 60, 480)", length)
+		return nil, fmt.Errorf("fft: unsupported length %d (supported: 64, 512, 256, 60, 480, 240)", length)
 	}
 
 	// Allocate the bit-reversal scratch buffer.

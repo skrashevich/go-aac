@@ -16,10 +16,11 @@ import (
 )
 
 const (
-	aotAACMain = 1
-	aotAACLC   = 2
-	aotAACLTP  = 4
-	aotEscape  = 31
+	aotAACMain  = 1
+	aotAACLC    = 2
+	aotAACLTP   = 4
+	aotERAACELD = 39
+	aotEscape   = 31
 )
 
 const (
@@ -122,6 +123,48 @@ func (d *Decoder) SetASC(data []byte) error {
 			_ = stream.ReadBits(4)
 			return fmt.Errorf("decoder: PCE unimplemented")
 		}
+	case aotERAACELD:
+		frameLengthFlag := stream.ReadBits(1) != 0
+		if frameLengthFlag {
+			config.FrameLength = 480
+		} else {
+			config.FrameLength = 512
+		}
+		_ = stream.ReadBits(1) // vcb11Flag
+		_ = stream.ReadBits(1) // rvlcFlag
+		_ = stream.ReadBits(1) // hcrFlag
+
+		sbrPresent := stream.ReadBits(1) != 0
+		if sbrPresent {
+			_ = stream.ReadBits(1) // sbrSamplingRate
+			_ = stream.ReadBits(1) // sbrCrcFlag
+			return fmt.Errorf("decoder: ELD SBR not supported")
+		}
+
+		for {
+			eldExtType := stream.ReadBits(4)
+			if eldExtType == 0 {
+				break
+			}
+			eldExtLen := int(stream.ReadBits(4))
+			if eldExtLen == 0x0f {
+				extra := int(stream.ReadBits(8))
+				eldExtLen += extra
+				if extra == 0xff {
+					eldExtLen += int(stream.ReadBits(16))
+				}
+			}
+			stream.Advance(eldExtLen * 8)
+		}
+
+		epConfig := stream.ReadBits(2)
+		if epConfig > 1 {
+			return fmt.Errorf("decoder: ELD epConfig %d not supported", epConfig)
+		}
+
+		if config.ChanConfig == channelConfigNone {
+			return fmt.Errorf("decoder: PCE unimplemented")
+		}
 	default:
 		return fmt.Errorf("decoder: AAC profile %d not supported", config.Profile)
 	}
@@ -130,7 +173,7 @@ func (d *Decoder) SetASC(data []byte) error {
 		return err
 	}
 
-	filterBank, err := filterbank.New(false, config.ChanConfig)
+	filterBank, err := filterbank.NewWithFrameLength(false, config.ChanConfig, config.FrameLength)
 	if err != nil {
 		return err
 	}
@@ -527,11 +570,11 @@ func (d *Decoder) setConfigFromADTS(header adts.Header) error {
 	config.ChanConfig = header.ChannelConfig
 	config.FrameLength = 1024
 
-	filterBank, err := filterbank.New(false, config.ChanConfig)
+	filterBank, err := filterbank.NewWithFrameLength(false, config.ChanConfig, config.FrameLength)
 	if err != nil {
 		return err
 	}
-	if config.Profile != aotAACMain && config.Profile != aotAACLC && config.Profile != aotAACLTP {
+	if config.Profile != aotAACMain && config.Profile != aotAACLC && config.Profile != aotAACLTP && config.Profile != aotERAACELD {
 		return fmt.Errorf("decoder: AAC profile %d not supported", config.Profile)
 	}
 	if config.ChanConfig == channelConfigNone {
