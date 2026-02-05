@@ -21,7 +21,7 @@ func TestNew_SupportedLengths(t *testing.T) {
 }
 
 func TestNew_UnsupportedLength(t *testing.T) {
-	unsupported := []int{0, 1, 2, 32, 128, 256, 1024, -1, 100}
+	unsupported := []int{0, 1, 2, 32, 1024, -1, 100}
 	for _, n := range unsupported {
 		f, err := New(n)
 		if err == nil {

@@ -47,6 +47,13 @@ func New(config ics.Config) (*Element, error) {
 	}, nil
 }
 
+// NewELD creates a new CPE element for AAC-ELD.
+// In ELD mode, the CPE uses the same internal structure but the ICS
+// elements are configured for ELD operation.
+func NewELD(config ics.Config) (*Element, error) {
+	return New(config)
+}
+
 // Decode reads the CPE from the bitstream.
 func (e *Element) Decode(stream ics.BitReader, config ics.Config) error {
 	left := e.Left

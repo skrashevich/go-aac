@@ -23,6 +23,8 @@ type Config struct {
 	SampleIndex int
 	FrameLength int
 	Profile     int
+	IsELD       bool // true for AAC-ELD (AOT 39)
+	IsLD        bool // true for AAC-LD (AOT 23)
 }
 
 const (
@@ -78,8 +80,18 @@ func New(config Config) (*ICStream, error) {
 	if config.FrameLength <= 0 {
 		return nil, fmt.Errorf("ics: invalid frame length %d", config.FrameLength)
 	}
-	if config.SampleIndex < 0 || config.SampleIndex >= len(tables.SWBOffset1024) {
-		return nil, fmt.Errorf("ics: invalid sample index %d", config.SampleIndex)
+	if !config.IsELD && !config.IsLD {
+		if config.SampleIndex < 0 || config.SampleIndex >= len(tables.SWBOffset1024) {
+			return nil, fmt.Errorf("ics: invalid sample index %d", config.SampleIndex)
+		}
+	} else {
+		maxIdx := len(tables.SWBOffset512)
+		if config.FrameLength == 480 {
+			maxIdx = len(tables.SWBOffset480)
+		}
+		if config.SampleIndex < 0 || config.SampleIndex >= maxIdx {
+			return nil, fmt.Errorf("ics: invalid sample index %d for ELD", config.SampleIndex)
+		}
 	}
 
 	decoder := &ICStream{
@@ -93,7 +105,11 @@ func New(config Config) (*ICStream, error) {
 	}
 
 	var err error
-	decoder.tns, err = tns.New(config.SampleIndex)
+	if config.IsELD {
+		decoder.tns, err = tns.NewELD(config.SampleIndex, config.FrameLength)
+	} else {
+		decoder.tns, err = tns.New(config.SampleIndex)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -118,13 +134,18 @@ func (ics *ICStream) Decode(stream BitReader, config Config, commonWindow bool) 
 		return err
 	}
 
-	ics.pulsePresent = stream.ReadBits(1) != 0
-	if ics.pulsePresent {
-		if ics.Info.WindowSequence == EightShortSequence {
-			return fmt.Errorf("ics: pulse tool not allowed in eight short sequence")
-		}
-		if err := ics.decodePulseData(stream); err != nil {
-			return err
+	if config.IsELD {
+		// ELD does not use pulse data
+		ics.pulsePresent = false
+	} else {
+		ics.pulsePresent = stream.ReadBits(1) != 0
+		if ics.pulsePresent {
+			if ics.Info.WindowSequence == EightShortSequence {
+				return fmt.Errorf("ics: pulse tool not allowed in eight short sequence")
+			}
+			if err := ics.decodePulseData(stream); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -135,9 +156,14 @@ func (ics *ICStream) Decode(stream BitReader, config Config, commonWindow bool) 
 		}
 	}
 
-	ics.GainPresent = stream.ReadBits(1) != 0
-	if ics.GainPresent {
-		return fmt.Errorf("ics: gain control not implemented")
+	if config.IsELD {
+		// ELD does not use gain control
+		ics.GainPresent = false
+	} else {
+		ics.GainPresent = stream.ReadBits(1) != 0
+		if ics.GainPresent {
+			return fmt.Errorf("ics: gain control not implemented")
+		}
 	}
 
 	if err := ics.decodeSpectralData(stream); err != nil {
@@ -289,6 +315,13 @@ func (ics *ICStream) decodeSpectralData(stream BitReader) error {
 
 	groupOff := 0
 	idx := 0
+	// groupStep is the spectral offset between windows within a group.
+	// For short windows it's 128; for ELD/LD long windows it's the frame length.
+	groupStep := 128
+	if info.WindowSequence != EightShortSequence && info.WindowCount == 1 {
+		groupStep = len(data)
+	}
+
 	for g := 0; g < windowGroups; g++ {
 		groupLen := info.GroupLength[g]
 		for sfb := 0; sfb < maxSFB; sfb, idx = sfb+1, idx+1 {
@@ -302,7 +335,7 @@ func (ics *ICStream) decodeSpectralData(stream BitReader) error {
 					for i := off; i < off+width; i++ {
 						data[i] = 0
 					}
-					off += 128
+					off += groupStep
 				}
 			case NoiseBT:
 				for group := 0; group < groupLen; group++ {
@@ -317,7 +350,7 @@ func (ics *ICStream) decodeSpectralData(stream BitReader) error {
 					for k := 0; k < width; k++ {
 						data[off+k] *= scale
 					}
-					off += 128
+					off += groupStep
 				}
 			default:
 				for group := 0; group < groupLen; group++ {
@@ -339,11 +372,11 @@ func (ics *ICStream) decodeSpectralData(stream BitReader) error {
 							data[off+k+j] *= scaleFactors[idx]
 						}
 					}
-					off += 128
+					off += groupStep
 				}
 			}
 		}
-		groupOff += groupLen << 7
+		groupOff += groupLen * groupStep
 	}
 
 	if ics.pulsePresent {
@@ -382,7 +415,12 @@ func NewInfo() *ICSInfo {
 // Decode reads ICSInfo from the bitstream.
 func (info *ICSInfo) Decode(stream BitReader, config Config, commonWindow bool) error {
 	_ = commonWindow
-	_ = stream.ReadBits(1)
+
+	if config.IsELD {
+		return info.decodeELD(stream, config)
+	}
+
+	_ = stream.ReadBits(1) // ics_reserved_bit
 
 	info.WindowSequence = int(stream.ReadBits(2))
 	info.WindowShape[0] = info.WindowShape[1]
@@ -415,6 +453,35 @@ func (info *ICSInfo) Decode(stream BitReader, config Config, commonWindow bool) 
 		if info.PredictorPresent {
 			return fmt.Errorf("ics: prediction not implemented")
 		}
+	}
+
+	return nil
+}
+
+// decodeELD reads ICSInfo for AAC-ELD from the bitstream.
+// ELD only uses long windows (OnlyLongSequence) and has no ics_reserved_bit.
+func (info *ICSInfo) decodeELD(stream BitReader, config Config) error {
+	// ELD: no ics_reserved_bit, no window_sequence, no window_shape
+	// ELD always uses OnlyLongSequence equivalent
+	info.WindowSequence = OnlyLongSequence
+	info.WindowShape[0] = 0
+	info.WindowShape[1] = 0
+	info.GroupCount = 1
+	info.GroupLength[0] = 1
+	info.WindowCount = 1
+	info.PredictorPresent = false
+
+	info.MaxSFB = int(stream.ReadBits(6))
+
+	switch config.FrameLength {
+	case 512:
+		info.SwbOffsets = toIntSlice(tables.SWBOffset512[config.SampleIndex])
+		info.SwbCount = int(tables.SWBWindowCount512[config.SampleIndex])
+	case 480:
+		info.SwbOffsets = toIntSlice(tables.SWBOffset480[config.SampleIndex])
+		info.SwbCount = int(tables.SWBWindowCount480[config.SampleIndex])
+	default:
+		return fmt.Errorf("ics: unsupported ELD frame length %d", config.FrameLength)
 	}
 
 	return nil

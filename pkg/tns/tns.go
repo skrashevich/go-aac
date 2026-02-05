@@ -77,6 +77,29 @@ func New(sampleIndex int) (*TNS, error) {
 	return &TNS{maxBands: tnsMaxBands1024[sampleIndex]}, nil
 }
 
+// NewELD creates a TNS processor for AAC-ELD with the given sample rate index
+// and frame length (512 or 480).
+func NewELD(sampleIndex int, frameLength int) (*TNS, error) {
+	var table []int
+	switch frameLength {
+	case 512:
+		table = tnsMaxBands512
+	case 480:
+		table = tnsMaxBands480
+	default:
+		return nil, fmt.Errorf("tns: unsupported ELD frame length %d", frameLength)
+	}
+	if sampleIndex < 0 || sampleIndex >= len(table) {
+		return nil, fmt.Errorf("tns: invalid sample index %d", sampleIndex)
+	}
+	return &TNS{maxBands: table[sampleIndex]}, nil
+}
+
+var (
+	tnsMaxBands512 = []int{31, 31, 31, 31, 32, 37, 31, 31, 31, 31, 31, 31, 31}
+	tnsMaxBands480 = []int{31, 31, 31, 31, 32, 37, 30, 30, 30, 30, 30, 30, 30}
+)
+
 // Decode reads TNS data from the bitstream for the given window info.
 func (t *TNS) Decode(stream BitReader, info Info) error {
 	bits := longBits

@@ -72,6 +72,8 @@ func New(length int) (*MDCT, error) {
 	}
 
 	// Select the appropriate precomputed twiddle factor table.
+	// Standard AAC-LC sizes use precomputed tables for maximum precision.
+	// ELD sizes (1024, 960) generate tables on demand.
 	var srcTable [][2]float64
 	switch length {
 	case 2048:
@@ -82,8 +84,10 @@ func New(length int) (*MDCT, error) {
 		srcTable = tables.MDCTTable1920
 	case 240:
 		srcTable = tables.MDCTTable240
+	case 1024, 960:
+		srcTable = tables.GenerateMDCTTable(length)
 	default:
-		return nil, fmt.Errorf("mdct: unsupported length %d (supported: 2048, 256, 1920, 240)", length)
+		return nil, fmt.Errorf("mdct: unsupported length %d (supported: 240, 256, 960, 1024, 1920, 2048)", length)
 	}
 
 	// Convert float64 table to float32 for faster processing.

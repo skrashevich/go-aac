@@ -4,7 +4,8 @@
 // samples from spectral coefficients.
 //
 // This is a direct port of the FilterBank module from AAC.js by Devon Govett
-// (LGPL v3).
+// (LGPL v3). AAC-ELD low-delay filterbank support is based on the fdk-aac
+// reference implementation.
 package filterbank
 
 import (
@@ -12,6 +13,7 @@ import (
 	"math"
 
 	"github.com/skrashevich/go-aac/pkg/mdct"
+	"github.com/skrashevich/go-aac/pkg/tables"
 )
 
 const (
@@ -35,11 +37,17 @@ type FilterBank struct {
 	mid         int
 	trans       int
 
+	isELD bool
+
 	mdctShort *mdct.MDCT
 	mdctLong  *mdct.MDCT
 
 	overlaps [][]float32
 	buf      []float32
+
+	// ELD-specific: low-delay synthesis window and extended overlap buffer
+	ldWin     []float32
+	ldOverlap [][]float32
 }
 
 var (
@@ -87,6 +95,52 @@ func New(smallFrames bool, channels int) (*FilterBank, error) {
 	}
 	if f.length > 0 {
 		f.buf = make([]float32, 2*f.length)
+	}
+
+	return f, nil
+}
+
+// NewELD creates a FilterBank for AAC-ELD with the given frame length and channels.
+// frameLength should be 512 or 480.
+func NewELD(frameLength int, channels int) (*FilterBank, error) {
+	if channels <= 0 {
+		return nil, fmt.Errorf("filterbank: invalid channel count %d", channels)
+	}
+
+	var ldWin []float32
+	switch frameLength {
+	case 512:
+		ldWin = tables.LowDelaySynthesis512()
+	case 480:
+		ldWin = tables.LowDelaySynthesis480()
+	default:
+		return nil, fmt.Errorf("filterbank: unsupported ELD frame length %d (must be 512 or 480)", frameLength)
+	}
+
+	f := &FilterBank{
+		length: frameLength,
+		isELD:  true,
+		ldWin:  ldWin,
+	}
+
+	var err error
+	f.mdctLong, err = mdct.New(frameLength * 2)
+	if err != nil {
+		return nil, fmt.Errorf("filterbank: mdct eld: %w", err)
+	}
+
+	f.buf = make([]float32, 2*frameLength)
+
+	// ELD uses an extended overlap buffer of 2*N samples
+	f.ldOverlap = make([][]float32, channels)
+	for i := 0; i < channels; i++ {
+		f.ldOverlap[i] = make([]float32, 2*frameLength)
+	}
+
+	// Standard overlap buffer for compatibility
+	f.overlaps = make([][]float32, channels)
+	for i := 0; i < channels; i++ {
+		f.overlaps[i] = make([]float32, frameLength)
 	}
 
 	return f, nil
@@ -216,6 +270,73 @@ func (f *FilterBank) Process(info WindowInfo, input, output []float32, channel i
 	default:
 		return fmt.Errorf("filterbank: unknown window sequence %d", info.WindowSequence)
 	}
+
+	return nil
+}
+
+// ProcessELD runs the low-delay filter bank for AAC-ELD.
+//
+// The ELD filterbank uses:
+//  1. Standard IMDCT to produce 2N time-domain samples from N spectral coefficients
+//  2. Low-delay synthesis window application (3N coefficients)
+//  3. Overlap-add with 2N-sample overlap buffer
+//
+// This implements the InvMdctTransformLowDelay algorithm from the fdk-aac
+// reference implementation.
+func (f *FilterBank) ProcessELD(input, output []float32, channel int) error {
+	if !f.isELD {
+		return fmt.Errorf("filterbank: ProcessELD called on non-ELD filterbank")
+	}
+	if channel < 0 || channel >= len(f.ldOverlap) {
+		return fmt.Errorf("filterbank: invalid channel %d", channel)
+	}
+
+	n := f.length // frame length (512 or 480)
+	buf := f.buf
+	ldWin := f.ldWin
+	overlap := f.ldOverlap[channel]
+
+	// Step 1: IMDCT - N spectral coefficients -> 2N time-domain samples
+	f.mdctLong.Process(input, 0, buf, 0)
+
+	// Step 2 & 3: Apply low-delay synthesis window and overlap-add.
+	// The LD window has 3*N coefficients organized as follows:
+	// - ldWin[0..N-1]: window for the first section
+	// - ldWin[N..2N-1]: window for the middle section
+	// - ldWin[2N..3N-1]: window for the last section
+	//
+	// The algorithm:
+	// 1. Shift the overlap buffer: move overlap[0..N-1] -> overlap[N..2N-1]
+	//    (conceptually, the old "current" becomes the "previous")
+	// 2. Apply windowed IMDCT output to the overlap buffer
+	// 3. Read output from the overlap buffer
+
+	// Shift overlap buffer
+	copy(overlap[n:2*n], overlap[0:n])
+
+	// Apply IMDCT output with LD synthesis window to overlap buffer
+	for i := 0; i < n; i++ {
+		overlap[i] = 0
+	}
+
+	// Accumulate windowed IMDCT output into overlap
+	// Section 1: buf[0..N-1] * ldWin[0..N-1] -> added to overlap[0..N-1]
+	for i := 0; i < n; i++ {
+		overlap[i] += buf[i] * ldWin[i]
+	}
+
+	// Section 2: buf[N..2N-1] * ldWin[N..2N-1] -> added to overlap[0..N-1]
+	for i := 0; i < n; i++ {
+		overlap[i] += buf[n+i] * ldWin[n+i]
+	}
+
+	// Section 3: previous overlap contribution with ldWin[2N..3N-1]
+	for i := 0; i < n; i++ {
+		overlap[i] += overlap[n+i] * ldWin[2*n+i]
+	}
+
+	// Output the current frame
+	copy(output, overlap[0:n])
 
 	return nil
 }

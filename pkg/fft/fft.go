@@ -59,14 +59,20 @@ func New(length int) (*FFT, error) {
 	switch length {
 	case 64:
 		f.roots = generateTableShort(64)
+	case 128:
+		f.roots = generateTableLong(128)
+	case 256:
+		f.roots = generateTableLong(256)
 	case 512:
 		f.roots = generateTableLong(512)
 	case 60:
 		f.roots = generateTableShort(60)
+	case 240:
+		f.roots = generateTableLong(240)
 	case 480:
 		f.roots = generateTableLong(480)
 	default:
-		return nil, fmt.Errorf("fft: unsupported length %d (supported: 64, 512, 60, 480)", length)
+		return nil, fmt.Errorf("fft: unsupported length %d (supported: 60, 64, 128, 240, 256, 480, 512)", length)
 	}
 
 	// Allocate the bit-reversal scratch buffer.
