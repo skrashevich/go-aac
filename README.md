@@ -1,5 +1,12 @@
 # go-aac
 
+<!-- badges:start -->
+[![GitHub stars](https://img.shields.io/github/stars/skrashevich/go-aac?style=flat-square)](https://github.com/skrashevich/go-aac/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/skrashevich/go-aac?style=flat-square)](https://github.com/skrashevich/go-aac/commits/main)
+[![License](https://img.shields.io/github/license/skrashevich/go-aac?style=flat-square)](https://github.com/skrashevich/go-aac/blob/main/LICENSE)
+<!-- badges:end -->
+
+
 <div align="center">
 
 [![stars](https://img.shields.io/github/stars/skrashevich/go-aac?style=flat-square&logo=github)](https://github.com/skrashevich/go-aac/stargazers)
