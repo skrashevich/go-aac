@@ -9,7 +9,7 @@ import (
 // ---------- Constructor / New ----------
 
 func TestNew_SupportedLengths(t *testing.T) {
-	for _, n := range []int{64, 512, 60, 480} {
+	for _, n := range []int{64, 512, 256, 60, 480, 240} {
 		f, err := New(n)
 		if err != nil {
 			t.Fatalf("New(%d) returned unexpected error: %v", n, err)
@@ -21,7 +21,7 @@ func TestNew_SupportedLengths(t *testing.T) {
 }
 
 func TestNew_UnsupportedLength(t *testing.T) {
-	unsupported := []int{0, 1, 2, 32, 128, 256, 1024, -1, 100}
+	unsupported := []int{0, 1, 2, 32, 128, 1024, -1, 100}
 	for _, n := range unsupported {
 		f, err := New(n)
 		if err == nil {
@@ -36,7 +36,7 @@ func TestNew_UnsupportedLength(t *testing.T) {
 // ---------- Table Generation ----------
 
 func TestGenerateTableShort_Length(t *testing.T) {
-	for _, n := range []int{60, 64} {
+	for _, n := range []int{60, 64, 240} {
 		table := generateTableShort(n)
 		if len(table) != n {
 			t.Errorf("generateTableShort(%d): got length %d, want %d", n, len(table), n)
@@ -45,7 +45,7 @@ func TestGenerateTableShort_Length(t *testing.T) {
 }
 
 func TestGenerateTableShort_FirstEntry(t *testing.T) {
-	for _, n := range []int{60, 64} {
+	for _, n := range []int{60, 64, 240} {
 		table := generateTableShort(n)
 		if table[0][0] != 1.0 || table[0][1] != 0.0 {
 			t.Errorf("generateTableShort(%d)[0] = [%f, %f], want [1, 0]", n, table[0][0], table[0][1])
@@ -55,7 +55,7 @@ func TestGenerateTableShort_FirstEntry(t *testing.T) {
 
 func TestGenerateTableShort_UnitCircle(t *testing.T) {
 	// Each twiddle factor should lie on the unit circle: |re|^2 + |im|^2 ~ 1
-	for _, n := range []int{60, 64} {
+	for _, n := range []int{60, 64, 240} {
 		table := generateTableShort(n)
 		for i := 0; i < n; i++ {
 			re := float64(table[i][0])
@@ -71,7 +71,7 @@ func TestGenerateTableShort_UnitCircle(t *testing.T) {
 
 func TestGenerateTableShort_MatchesDirect(t *testing.T) {
 	// Verify against directly computed twiddle factors: e^{-2*pi*i*k/N}
-	for _, n := range []int{60, 64} {
+	for _, n := range []int{60, 64, 240} {
 		table := generateTableShort(n)
 		for k := 0; k < n; k++ {
 			angle := -2.0 * math.Pi * float64(k) / float64(n)
@@ -92,7 +92,7 @@ func TestGenerateTableShort_MatchesDirect(t *testing.T) {
 }
 
 func TestGenerateTableLong_Length(t *testing.T) {
-	for _, n := range []int{480, 512} {
+	for _, n := range []int{480, 512, 256} {
 		table := generateTableLong(n)
 		if len(table) != n {
 			t.Errorf("generateTableLong(%d): got length %d, want %d", n, len(table), n)
@@ -101,7 +101,7 @@ func TestGenerateTableLong_Length(t *testing.T) {
 }
 
 func TestGenerateTableLong_FirstEntry(t *testing.T) {
-	for _, n := range []int{480, 512} {
+	for _, n := range []int{480, 512, 256} {
 		table := generateTableLong(n)
 		if table[0][0] != 1.0 || table[0][1] != 0.0 || table[0][2] != 0.0 {
 			t.Errorf("generateTableLong(%d)[0] = [%f, %f, %f], want [1, 0, 0]",
@@ -112,7 +112,7 @@ func TestGenerateTableLong_FirstEntry(t *testing.T) {
 
 func TestGenerateTableLong_NegImRelation(t *testing.T) {
 	// For long tables, entry[1] = -entry[2] (negated imaginary).
-	for _, n := range []int{480, 512} {
+	for _, n := range []int{480, 512, 256} {
 		table := generateTableLong(n)
 		for i := 0; i < n; i++ {
 			if !approxEq32(table[i][1], -table[i][2], 1e-7) {

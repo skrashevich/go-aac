@@ -1237,6 +1237,44 @@ var swbOffset128_8 = []uint16{
 	36, 44, 52, 60, 72, 88, 108, 128,
 }
 
+var swbOffset512_48 = []uint16{
+	0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48,
+	52, 56, 60, 68, 76, 84, 92, 100, 112, 124, 136, 148, 164,
+	184, 208, 236, 268, 300, 332, 364, 396, 428, 460, 512,
+}
+
+var swbOffset512_32 = []uint16{
+	0, 4, 8, 12, 16, 20, 24, 28, 32, 36,
+	40, 44, 48, 52, 56, 64, 72, 80, 88, 96,
+	108, 120, 132, 144, 160, 176, 192, 212, 236, 260,
+	288, 320, 352, 384, 416, 448, 480, 512,
+}
+
+var swbOffset512_24 = []uint16{
+	0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40,
+	44, 52, 60, 68, 80, 92, 104, 120, 140, 164, 192,
+	224, 256, 288, 320, 352, 384, 416, 448, 480, 512,
+}
+
+var swbOffset480_48 = []uint16{
+	0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48,
+	52, 56, 64, 72, 80, 88, 96, 108, 120, 132, 144, 156, 172,
+	188, 212, 240, 272, 304, 336, 368, 400, 432, 480,
+}
+
+var swbOffset480_32 = []uint16{
+	0, 4, 8, 12, 16, 20, 24, 28, 32, 36,
+	40, 44, 48, 52, 56, 60, 64, 72, 80, 88,
+	96, 104, 112, 124, 136, 148, 164, 180, 200, 224,
+	256, 288, 320, 352, 384, 416, 448, 480,
+}
+
+var swbOffset480_24 = []uint16{
+	0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40,
+	44, 52, 60, 68, 80, 92, 104, 120, 140, 164, 192,
+	224, 256, 288, 320, 352, 384, 416, 448, 480,
+}
+
 // SWBOffset1024 contains scalefactor window band offsets for long (1024-sample)
 // windows, indexed by sample rate index (0-11). Each sub-slice defines the
 // spectral boundaries of scalefactor bands used in AAC decoding.
@@ -1255,6 +1293,7 @@ var SWBOffset1024 = [][]uint16{
 	swbOffset1024_16, // 12000 Hz
 	swbOffset1024_16, // 11025 Hz
 	swbOffset1024_8,  // 8000 Hz
+	swbOffset1024_8,  // 7350 Hz
 }
 
 // SWBOffset128 contains scalefactor window band offsets for short (128-sample)
@@ -1275,18 +1314,67 @@ var SWBOffset128 = [][]uint16{
 	swbOffset128_16, // 12000 Hz
 	swbOffset128_16, // 11025 Hz
 	swbOffset128_8,  // 8000 Hz
+	swbOffset128_8,  // 7350 Hz
+}
+
+// SWBOffset512 contains scalefactor window band offsets for ELD (512-sample)
+// windows, indexed by sample rate index (0-12).
+var SWBOffset512 = [][]uint16{
+	swbOffset512_48, // 96000 Hz
+	swbOffset512_48, // 88200 Hz
+	swbOffset512_48, // 64000 Hz
+	swbOffset512_48, // 48000 Hz
+	swbOffset512_48, // 44100 Hz
+	swbOffset512_32, // 32000 Hz
+	swbOffset512_24, // 24000 Hz
+	swbOffset512_24, // 22050 Hz
+	swbOffset512_24, // 16000 Hz
+	swbOffset512_24, // 12000 Hz
+	swbOffset512_24, // 11025 Hz
+	swbOffset512_24, // 8000 Hz
+	swbOffset512_24, // 7350 Hz
+}
+
+// SWBOffset480 contains scalefactor window band offsets for ELD (480-sample)
+// windows, indexed by sample rate index (0-12).
+var SWBOffset480 = [][]uint16{
+	swbOffset480_48, // 96000 Hz
+	swbOffset480_48, // 88200 Hz
+	swbOffset480_48, // 64000 Hz
+	swbOffset480_48, // 48000 Hz
+	swbOffset480_48, // 44100 Hz
+	swbOffset480_32, // 32000 Hz
+	swbOffset480_24, // 24000 Hz
+	swbOffset480_24, // 22050 Hz
+	swbOffset480_24, // 16000 Hz
+	swbOffset480_24, // 12000 Hz
+	swbOffset480_24, // 11025 Hz
+	swbOffset480_24, // 8000 Hz
+	swbOffset480_24, // 7350 Hz
 }
 
 // SWBShortWindowCount contains the number of scalefactor window bands in
 // short (128-sample) windows for each sample rate index (0-11).
 var SWBShortWindowCount = []uint8{
-	12, 12, 12, 14, 14, 14, 15, 15, 15, 15, 15, 15,
+	12, 12, 12, 14, 14, 14, 15, 15, 15, 15, 15, 15, 15,
 }
 
 // SWBLongWindowCount contains the number of scalefactor window bands in
 // long (1024-sample) windows for each sample rate index (0-11).
 var SWBLongWindowCount = []uint8{
-	41, 41, 47, 49, 49, 51, 47, 47, 43, 43, 43, 40,
+	41, 41, 47, 49, 49, 51, 47, 47, 43, 43, 43, 40, 40,
+}
+
+// SWBLongWindowCount512 contains the number of scalefactor window bands in
+// ELD long (512-sample) windows for each sample rate index (0-12).
+var SWBLongWindowCount512 = []uint8{
+	36, 36, 36, 36, 36, 37, 31, 31, 31, 31, 31, 31, 31,
+}
+
+// SWBLongWindowCount480 contains the number of scalefactor window bands in
+// ELD long (480-sample) windows for each sample rate index (0-12).
+var SWBLongWindowCount480 = []uint8{
+	35, 35, 35, 35, 35, 37, 30, 30, 30, 30, 30, 30, 30,
 }
 
 // ScalefactorTable is a lookup table of 428 float32 values used for

@@ -78,8 +78,13 @@ func New(config Config) (*ICStream, error) {
 	if config.FrameLength <= 0 {
 		return nil, fmt.Errorf("ics: invalid frame length %d", config.FrameLength)
 	}
-	if config.SampleIndex < 0 || config.SampleIndex >= len(tables.SWBOffset1024) {
+	if config.SampleIndex < 0 || config.SampleIndex >= len(tables.SampleRates) {
 		return nil, fmt.Errorf("ics: invalid sample index %d", config.SampleIndex)
+	}
+	switch config.FrameLength {
+	case 1024, 512, 480:
+	default:
+		return nil, fmt.Errorf("ics: unsupported frame length %d", config.FrameLength)
 	}
 
 	decoder := &ICStream{
@@ -93,7 +98,7 @@ func New(config Config) (*ICStream, error) {
 	}
 
 	var err error
-	decoder.tns, err = tns.New(config.SampleIndex)
+	decoder.tns, err = tns.New(config.SampleIndex, config.FrameLength)
 	if err != nil {
 		return nil, err
 	}
@@ -392,6 +397,9 @@ func (info *ICSInfo) Decode(stream BitReader, config Config, commonWindow bool) 
 	info.GroupLength[0] = 1
 
 	if info.WindowSequence == EightShortSequence {
+		if config.FrameLength != 1024 {
+			return fmt.Errorf("ics: short window sequences not supported for frame length %d", config.FrameLength)
+		}
 		info.MaxSFB = int(stream.ReadBits(4))
 		for i := 0; i < 7; i++ {
 			if stream.ReadBits(1) != 0 {
@@ -409,8 +417,19 @@ func (info *ICSInfo) Decode(stream BitReader, config Config, commonWindow bool) 
 	} else {
 		info.MaxSFB = int(stream.ReadBits(6))
 		info.WindowCount = 1
-		info.SwbOffsets = toIntSlice(tables.SWBOffset1024[config.SampleIndex])
-		info.SwbCount = int(tables.SWBLongWindowCount[config.SampleIndex])
+		switch config.FrameLength {
+		case 1024:
+			info.SwbOffsets = toIntSlice(tables.SWBOffset1024[config.SampleIndex])
+			info.SwbCount = int(tables.SWBLongWindowCount[config.SampleIndex])
+		case 512:
+			info.SwbOffsets = toIntSlice(tables.SWBOffset512[config.SampleIndex])
+			info.SwbCount = int(tables.SWBLongWindowCount512[config.SampleIndex])
+		case 480:
+			info.SwbOffsets = toIntSlice(tables.SWBOffset480[config.SampleIndex])
+			info.SwbCount = int(tables.SWBLongWindowCount480[config.SampleIndex])
+		default:
+			return fmt.Errorf("ics: unsupported frame length %d", config.FrameLength)
+		}
 		info.PredictorPresent = stream.ReadBits(1) != 0
 		if info.PredictorPresent {
 			return fmt.Errorf("ics: prediction not implemented")
