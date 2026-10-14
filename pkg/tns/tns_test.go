@@ -49,7 +49,7 @@ func TestNew(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tns, err := New(tt.sampleIndex)
+			tns, err := New(tt.sampleIndex, 1024)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("New() expected error, got nil")
@@ -68,7 +68,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestDecodeLongWindow(t *testing.T) {
-	tns, err := New(4)
+	tns, err := New(4, 1024)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -77,15 +77,15 @@ func TestDecodeLongWindow(t *testing.T) {
 	// length=10 (6 bits), order=3 (5 bits), direction=1 (1 bit),
 	// coefCompress=0 (1 bit), coef indexes: 1,2,3 (3 bits each)
 	bits := []uint8{}
-	bits = append(bits, bitsFromUint(2, 1)...)      // nFilt = 1
-	bits = append(bits, bitsFromUint(1, 0)...)      // coefRes = 0
-	bits = append(bits, bitsFromUint(6, 10)...)     // length = 10
-	bits = append(bits, bitsFromUint(5, 3)...)      // order = 3
-	bits = append(bits, bitsFromUint(1, 1)...)      // direction = 1
-	bits = append(bits, bitsFromUint(1, 0)...)      // coefCompress = 0
-	bits = append(bits, bitsFromUint(3, 1)...)      // coef[0] = 1
-	bits = append(bits, bitsFromUint(3, 2)...)      // coef[1] = 2
-	bits = append(bits, bitsFromUint(3, 3)...)      // coef[2] = 3
+	bits = append(bits, bitsFromUint(2, 1)...)  // nFilt = 1
+	bits = append(bits, bitsFromUint(1, 0)...)  // coefRes = 0
+	bits = append(bits, bitsFromUint(6, 10)...) // length = 10
+	bits = append(bits, bitsFromUint(5, 3)...)  // order = 3
+	bits = append(bits, bitsFromUint(1, 1)...)  // direction = 1
+	bits = append(bits, bitsFromUint(1, 0)...)  // coefCompress = 0
+	bits = append(bits, bitsFromUint(3, 1)...)  // coef[0] = 1
+	bits = append(bits, bitsFromUint(3, 2)...)  // coef[1] = 2
+	bits = append(bits, bitsFromUint(3, 3)...)  // coef[2] = 3
 
 	br := &mockBitReader{bits: bits}
 	info := Info{
@@ -115,7 +115,7 @@ func TestDecodeLongWindow(t *testing.T) {
 }
 
 func TestDecodeShortWindow(t *testing.T) {
-	tns, err := New(4)
+	tns, err := New(4, 1024)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -124,14 +124,14 @@ func TestDecodeShortWindow(t *testing.T) {
 	// length=5 (4 bits), order=2 (3 bits), direction=0 (1 bit),
 	// coefCompress=1 (1 bit), coef indexes: 1,2 (3 bits each)
 	bits := []uint8{}
-	bits = append(bits, bitsFromUint(1, 1)...)      // nFilt = 1
-	bits = append(bits, bitsFromUint(1, 1)...)      // coefRes = 1
-	bits = append(bits, bitsFromUint(4, 5)...)      // length = 5
-	bits = append(bits, bitsFromUint(3, 2)...)      // order = 2
-	bits = append(bits, bitsFromUint(1, 0)...)      // direction = 0
-	bits = append(bits, bitsFromUint(1, 1)...)      // coefCompress = 1
-	bits = append(bits, bitsFromUint(3, 1)...)      // coef[0] = 1
-	bits = append(bits, bitsFromUint(3, 2)...)      // coef[1] = 2
+	bits = append(bits, bitsFromUint(1, 1)...) // nFilt = 1
+	bits = append(bits, bitsFromUint(1, 1)...) // coefRes = 1
+	bits = append(bits, bitsFromUint(4, 5)...) // length = 5
+	bits = append(bits, bitsFromUint(3, 2)...) // order = 2
+	bits = append(bits, bitsFromUint(1, 0)...) // direction = 0
+	bits = append(bits, bitsFromUint(1, 1)...) // coefCompress = 1
+	bits = append(bits, bitsFromUint(3, 1)...) // coef[0] = 1
+	bits = append(bits, bitsFromUint(3, 2)...) // coef[1] = 2
 
 	br := &mockBitReader{bits: bits}
 	info := Info{
@@ -161,7 +161,7 @@ func TestDecodeShortWindow(t *testing.T) {
 }
 
 func TestDecodeNoFilter(t *testing.T) {
-	tns, err := New(4)
+	tns, err := New(4, 1024)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -187,17 +187,17 @@ func TestDecodeNoFilter(t *testing.T) {
 }
 
 func TestDecodeOrderTooLarge(t *testing.T) {
-	tns, err := New(4)
+	tns, err := New(4, 1024)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
 
 	// Create bitstream with order > tnsMaxOrder (20)
 	bits := []uint8{}
-	bits = append(bits, bitsFromUint(2, 1)...)      // nFilt = 1
-	bits = append(bits, bitsFromUint(1, 0)...)      // coefRes = 0
-	bits = append(bits, bitsFromUint(6, 10)...)     // length = 10
-	bits = append(bits, bitsFromUint(5, 21)...)     // order = 21 (too large)
+	bits = append(bits, bitsFromUint(2, 1)...)  // nFilt = 1
+	bits = append(bits, bitsFromUint(1, 0)...)  // coefRes = 0
+	bits = append(bits, bitsFromUint(6, 10)...) // length = 10
+	bits = append(bits, bitsFromUint(5, 21)...) // order = 21 (too large)
 
 	br := &mockBitReader{bits: bits}
 	info := Info{
@@ -214,7 +214,7 @@ func TestDecodeOrderTooLarge(t *testing.T) {
 }
 
 func TestDecodeCoefIndexOutOfRange(t *testing.T) {
-	tns, err := New(4)
+	tns, err := New(4, 1024)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -223,22 +223,22 @@ func TestDecodeCoefIndexOutOfRange(t *testing.T) {
 	// coefRes=1, coefCompress=1 gives tableIdx=3, which uses tnsCoef14 (size 8)
 	// So index >= 8 will be out of range
 	bits := []uint8{}
-	bits = append(bits, bitsFromUint(2, 1)...)      // nFilt = 1
-	bits = append(bits, bitsFromUint(1, 1)...)      // coefRes = 1
-	bits = append(bits, bitsFromUint(6, 10)...)     // length = 10
-	bits = append(bits, bitsFromUint(5, 1)...)      // order = 1
-	bits = append(bits, bitsFromUint(1, 0)...)      // direction = 0
-	bits = append(bits, bitsFromUint(1, 1)...)      // coefCompress = 1
+	bits = append(bits, bitsFromUint(2, 1)...)  // nFilt = 1
+	bits = append(bits, bitsFromUint(1, 1)...)  // coefRes = 1
+	bits = append(bits, bitsFromUint(6, 10)...) // length = 10
+	bits = append(bits, bitsFromUint(5, 1)...)  // order = 1
+	bits = append(bits, bitsFromUint(1, 0)...)  // direction = 0
+	bits = append(bits, bitsFromUint(1, 1)...)  // coefCompress = 1
 	// coefLen = 1 + 3 - 1 = 3 bits, can encode 0-7
 	// But we'll try index 7 which should be valid for tnsCoef14
 	// Let's use coefRes=0, coefCompress=1 -> tableIdx=2 -> tnsCoef13 (size 4)
 	bits = []uint8{}
-	bits = append(bits, bitsFromUint(2, 1)...)      // nFilt = 1
-	bits = append(bits, bitsFromUint(1, 0)...)      // coefRes = 0
-	bits = append(bits, bitsFromUint(6, 10)...)     // length = 10
-	bits = append(bits, bitsFromUint(5, 1)...)      // order = 1
-	bits = append(bits, bitsFromUint(1, 0)...)      // direction = 0
-	bits = append(bits, bitsFromUint(1, 1)...)      // coefCompress = 1
+	bits = append(bits, bitsFromUint(2, 1)...)  // nFilt = 1
+	bits = append(bits, bitsFromUint(1, 0)...)  // coefRes = 0
+	bits = append(bits, bitsFromUint(6, 10)...) // length = 10
+	bits = append(bits, bitsFromUint(5, 1)...)  // order = 1
+	bits = append(bits, bitsFromUint(1, 0)...)  // direction = 0
+	bits = append(bits, bitsFromUint(1, 1)...)  // coefCompress = 1
 	// coefLen = 0 + 3 - 1 = 2 bits, can encode 0-3
 	// tnsCoef13 has size 4 (indices 0-3), so all valid
 	// We need to use coefLen=3 and get index >= table size
@@ -247,13 +247,13 @@ func TestDecodeCoefIndexOutOfRange(t *testing.T) {
 	// But we can only read up to 3 with 2 bits. So we need to manipulate differently.
 	// Let's try negative index by checking code path
 	bits = []uint8{}
-	bits = append(bits, bitsFromUint(2, 1)...)      // nFilt = 1
-	bits = append(bits, bitsFromUint(1, 0)...)      // coefRes = 0
-	bits = append(bits, bitsFromUint(6, 10)...)     // length = 10
-	bits = append(bits, bitsFromUint(5, 1)...)      // order = 1
-	bits = append(bits, bitsFromUint(1, 0)...)      // direction = 0
-	bits = append(bits, bitsFromUint(1, 1)...)      // coefCompress = 1
-	bits = append(bits, bitsFromUint(2, 3)...)      // coef index = 3 (max for 2 bits, valid for tnsCoef13 size 4)
+	bits = append(bits, bitsFromUint(2, 1)...)  // nFilt = 1
+	bits = append(bits, bitsFromUint(1, 0)...)  // coefRes = 0
+	bits = append(bits, bitsFromUint(6, 10)...) // length = 10
+	bits = append(bits, bitsFromUint(5, 1)...)  // order = 1
+	bits = append(bits, bitsFromUint(1, 0)...)  // direction = 0
+	bits = append(bits, bitsFromUint(1, 1)...)  // coefCompress = 1
+	bits = append(bits, bitsFromUint(2, 3)...)  // coef index = 3 (max for 2 bits, valid for tnsCoef13 size 4)
 
 	br := &mockBitReader{bits: bits}
 	info := Info{
@@ -276,7 +276,7 @@ func TestDecodeCoefIndexOutOfRange(t *testing.T) {
 }
 
 func TestProcess(t *testing.T) {
-	tns, err := New(4)
+	tns, err := New(4, 1024)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -317,7 +317,7 @@ func TestProcess(t *testing.T) {
 }
 
 func TestProcessWithDirection(t *testing.T) {
-	tns, err := New(4)
+	tns, err := New(4, 1024)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -347,7 +347,7 @@ func TestProcessWithDirection(t *testing.T) {
 }
 
 func TestProcessMultipleWindows(t *testing.T) {
-	tns, err := New(4)
+	tns, err := New(4, 1024)
 	if err != nil {
 		t.Fatalf("New() failed: %v", err)
 	}
@@ -399,7 +399,7 @@ func TestMinInt(t *testing.T) {
 
 // Benchmarks
 func BenchmarkDecode(b *testing.B) {
-	tns, err := New(4)
+	tns, err := New(4, 1024)
 	if err != nil {
 		b.Fatalf("New() failed: %v", err)
 	}
@@ -431,7 +431,7 @@ func BenchmarkDecode(b *testing.B) {
 }
 
 func BenchmarkProcess(b *testing.B) {
-	tns, err := New(4)
+	tns, err := New(4, 1024)
 	if err != nil {
 		b.Fatalf("New() failed: %v", err)
 	}
@@ -462,7 +462,7 @@ func BenchmarkProcess(b *testing.B) {
 }
 
 func BenchmarkProcessReverse(b *testing.B) {
-	tns, err := New(4)
+	tns, err := New(4, 1024)
 	if err != nil {
 		b.Fatalf("New() failed: %v", err)
 	}

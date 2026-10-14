@@ -253,18 +253,18 @@ func TestMDCTTable240Values(t *testing.T) {
 	}
 }
 
-// TestSWBOffset1024Size verifies that SWBOffset1024 contains 12 elements
+// TestSWBOffset1024Size verifies that SWBOffset1024 contains 13 elements
 func TestSWBOffset1024Size(t *testing.T) {
-	expected := 12
+	expected := 13
 	actual := len(SWBOffset1024)
 	if actual != expected {
 		t.Errorf("SWBOffset1024 size mismatch: expected %d, got %d", expected, actual)
 	}
 }
 
-// TestSWBOffset128Size verifies that SWBOffset128 contains 12 elements
+// TestSWBOffset128Size verifies that SWBOffset128 contains 13 elements
 func TestSWBOffset128Size(t *testing.T) {
-	expected := 12
+	expected := 13
 	actual := len(SWBOffset128)
 	if actual != expected {
 		t.Errorf("SWBOffset128 size mismatch: expected %d, got %d", expected, actual)
@@ -274,7 +274,7 @@ func TestSWBOffset128Size(t *testing.T) {
 // TestSWBOffset1024SubarraySizes verifies that each subarray has the expected number of elements
 func TestSWBOffset1024SubarraySizes(t *testing.T) {
 	// Expected sizes based on the Go implementation
-	expectedSizes := []int{42, 42, 48, 50, 50, 52, 48, 48, 44, 44, 44, 41}
+	expectedSizes := []int{42, 42, 48, 50, 50, 52, 48, 48, 44, 44, 44, 41, 41}
 
 	for i, expectedSize := range expectedSizes {
 		actualSize := len(SWBOffset1024[i])
@@ -287,7 +287,7 @@ func TestSWBOffset1024SubarraySizes(t *testing.T) {
 // TestSWBOffset128SubarraySizes verifies that each subarray has the expected number of elements
 func TestSWBOffset128SubarraySizes(t *testing.T) {
 	// Expected sizes based on the Go implementation
-	expectedSizes := []int{13, 13, 13, 15, 15, 15, 16, 16, 16, 16, 16, 16}
+	expectedSizes := []int{13, 13, 13, 15, 15, 15, 16, 16, 16, 16, 16, 16, 16}
 
 	for i, expectedSize := range expectedSizes {
 		actualSize := len(SWBOffset128[i])
@@ -310,6 +310,8 @@ func TestSWBOffset1024Values(t *testing.T) {
 		{3, 49, 1024},  // 48000 Hz - last element
 		{11, 0, 0},     // 8000 Hz - first element
 		{11, 40, 1024}, // 8000 Hz - last element
+		{12, 0, 0},     // 7350 Hz - first element
+		{12, 40, 1024}, // 7350 Hz - last element
 	}
 
 	for _, tt := range tests {
@@ -328,12 +330,14 @@ func TestSWBOffset128Values(t *testing.T) {
 		position int
 		expected uint16
 	}{
-		{0, 0, 0},    // 96000 Hz - first element
-		{0, 12, 128}, // 96000 Hz - last element
-		{3, 0, 0},    // 48000 Hz - first element
-		{3, 14, 128}, // 48000 Hz - last element
-		{11, 0, 0},   // 8000 Hz - first element
+		{0, 0, 0},     // 96000 Hz - first element
+		{0, 12, 128},  // 96000 Hz - last element
+		{3, 0, 0},     // 48000 Hz - first element
+		{3, 14, 128},  // 48000 Hz - last element
+		{11, 0, 0},    // 8000 Hz - first element
 		{11, 15, 128}, // 8000 Hz - last element
+		{12, 0, 0},    // 7350 Hz - first element
+		{12, 15, 128}, // 7350 Hz - last element
 	}
 
 	for _, tt := range tests {
@@ -347,20 +351,20 @@ func TestSWBOffset128Values(t *testing.T) {
 
 // TestSWBWindowCountsSizes verifies the sizes of window count arrays
 func TestSWBWindowCountsSizes(t *testing.T) {
-	if len(SWBShortWindowCount) != 12 {
-		t.Errorf("SWBShortWindowCount size mismatch: expected 12, got %d", len(SWBShortWindowCount))
+	if len(SWBShortWindowCount) != 13 {
+		t.Errorf("SWBShortWindowCount size mismatch: expected 13, got %d", len(SWBShortWindowCount))
 	}
-	if len(SWBLongWindowCount) != 12 {
-		t.Errorf("SWBLongWindowCount size mismatch: expected 12, got %d", len(SWBLongWindowCount))
+	if len(SWBLongWindowCount) != 13 {
+		t.Errorf("SWBLongWindowCount size mismatch: expected 13, got %d", len(SWBLongWindowCount))
 	}
 }
 
 // TestSWBWindowCountsValues verifies the values in window count arrays
 func TestSWBWindowCountsValues(t *testing.T) {
-	expectedShort := []uint8{12, 12, 12, 14, 14, 14, 15, 15, 15, 15, 15, 15}
-	expectedLong := []uint8{41, 41, 47, 49, 49, 51, 47, 47, 43, 43, 43, 40}
+	expectedShort := []uint8{12, 12, 12, 14, 14, 14, 15, 15, 15, 15, 15, 15, 15}
+	expectedLong := []uint8{41, 41, 47, 49, 49, 51, 47, 47, 43, 43, 43, 40, 40}
 
-	for i := 0; i < 12; i++ {
+	for i := 0; i < len(expectedShort); i++ {
 		if SWBShortWindowCount[i] != expectedShort[i] {
 			t.Errorf("SWBShortWindowCount[%d] mismatch: expected %d, got %d",
 				i, expectedShort[i], SWBShortWindowCount[i])
@@ -401,10 +405,10 @@ func TestScalefactorTableValues(t *testing.T) {
 		index    int
 		expected float32
 	}{
-		{0, float32(math.Pow(2, -50))},    // 2^(-200/4)
-		{200, 1.0},                         // 2^0 = 1
-		{204, float32(math.Pow(2, 1))},    // 2^(4/4) = 2
-		{400, float32(math.Pow(2, 50))},   // 2^(200/4)
+		{0, float32(math.Pow(2, -50))},  // 2^(-200/4)
+		{200, 1.0},                      // 2^0 = 1
+		{204, float32(math.Pow(2, 1))},  // 2^(4/4) = 2
+		{400, float32(math.Pow(2, 50))}, // 2^(200/4)
 	}
 
 	for _, tt := range tests {
@@ -445,11 +449,11 @@ func TestIQTableValues(t *testing.T) {
 		index    int
 		expected float32
 	}{
-		{0, 0},                                        // 0^(4/3) = 0
-		{1, 1},                                        // 1^(4/3) = 1
-		{8, float32(math.Pow(8, 4.0/3.0))},           // 8^(4/3) = 16
-		{27, float32(math.Pow(27, 4.0/3.0))},         // 27^(4/3) = 81
-		{64, float32(math.Pow(64, 4.0/3.0))},         // 64^(4/3) = 256
+		{0, 0},                               // 0^(4/3) = 0
+		{1, 1},                               // 1^(4/3) = 1
+		{8, float32(math.Pow(8, 4.0/3.0))},   // 8^(4/3) = 16
+		{27, float32(math.Pow(27, 4.0/3.0))}, // 27^(4/3) = 81
+		{64, float32(math.Pow(64, 4.0/3.0))}, // 64^(4/3) = 256
 	}
 
 	for _, tt := range tests {

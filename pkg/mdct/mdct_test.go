@@ -123,7 +123,7 @@ func maxAbs(a []float32) float32 {
 }
 
 func TestNewUnsupportedLength(t *testing.T) {
-	if _, err := New(1024); err == nil {
+	if _, err := New(111); err == nil {
 		t.Fatal("expected error for unsupported length")
 	}
 }

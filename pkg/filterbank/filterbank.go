@@ -40,32 +40,37 @@ type FilterBank struct {
 
 	overlaps [][]float32
 	buf      []float32
+
+	longWindows  [][]float32
+	shortWindows [][]float32
 }
 
-var (
-	sine1024 = generateSineWindow(1024)
-	sine128  = generateSineWindow(128)
-	kbd1024  = generateKBDWindow(4, 1024)
-	kbd128   = generateKBDWindow(6, 128)
-
-	longWindows  = [][]float32{sine1024, kbd1024}
-	shortWindows = [][]float32{sine128, kbd128}
-)
-
-// New creates a FilterBank for the given number of channels.
+// New creates a FilterBank for the given number of channels using the default
+// AAC-LC frame length of 1024 samples.
 //
 // AAC small frames are not supported, and will return an error if requested.
 func New(smallFrames bool, channels int) (*FilterBank, error) {
+	return NewWithFrameLength(smallFrames, channels, 1024)
+}
+
+// NewWithFrameLength creates a FilterBank for the given number of channels
+// and frame length.
+//
+// AAC small frames are not supported, and will return an error if requested.
+func NewWithFrameLength(smallFrames bool, channels int, frameLength int) (*FilterBank, error) {
 	if smallFrames {
 		return nil, fmt.Errorf("filterbank: small frames not supported")
 	}
 	if channels <= 0 {
 		return nil, fmt.Errorf("filterbank: invalid channel count %d", channels)
 	}
+	if frameLength <= 0 || frameLength%8 != 0 {
+		return nil, fmt.Errorf("filterbank: invalid frame length %d", frameLength)
+	}
 
 	f := &FilterBank{
-		length:      1024,
-		shortLength: 128,
+		length:      frameLength,
+		shortLength: frameLength / 8,
 	}
 
 	f.mid = (f.length - f.shortLength) / 2
@@ -89,13 +94,22 @@ func New(smallFrames bool, channels int) (*FilterBank, error) {
 		f.buf = make([]float32, 2*f.length)
 	}
 
+	f.longWindows = [][]float32{
+		generateSineWindow(f.length),
+		generateKBDWindow(4, f.length),
+	}
+	f.shortWindows = [][]float32{
+		generateSineWindow(f.shortLength),
+		generateKBDWindow(6, f.shortLength),
+	}
+
 	return f, nil
 }
 
 // Process runs the filter bank for a single channel.
 //
-// input must contain at least 1024 spectral values, output must contain at
-// least 1024 samples.
+// input must contain at least one frame's spectral values, output must contain
+// at least one frame's time samples.
 func (f *FilterBank) Process(info WindowInfo, input, output []float32, channel int) error {
 	if channel < 0 || channel >= len(f.overlaps) {
 		return fmt.Errorf("filterbank: invalid channel %d", channel)
@@ -109,17 +123,17 @@ func (f *FilterBank) Process(info WindowInfo, input, output []float32, channel i
 
 	windowShape := info.WindowShape[1]
 	windowShapePrev := info.WindowShape[0]
-	if windowShape < 0 || windowShape >= len(longWindows) {
+	if windowShape < 0 || windowShape >= len(f.longWindows) {
 		return fmt.Errorf("filterbank: invalid window shape %d", windowShape)
 	}
-	if windowShapePrev < 0 || windowShapePrev >= len(longWindows) {
+	if windowShapePrev < 0 || windowShapePrev >= len(f.longWindows) {
 		return fmt.Errorf("filterbank: invalid previous window shape %d", windowShapePrev)
 	}
 
-	longWin := longWindows[windowShape]
-	shortWin := shortWindows[windowShape]
-	longWinPrev := longWindows[windowShapePrev]
-	shortWinPrev := shortWindows[windowShapePrev]
+	longWin := f.longWindows[windowShape]
+	shortWin := f.shortWindows[windowShape]
+	longWinPrev := f.longWindows[windowShapePrev]
+	shortWinPrev := f.shortWindows[windowShapePrev]
 
 	length := f.length
 	shortLen := f.shortLength

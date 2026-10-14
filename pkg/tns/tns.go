@@ -53,6 +53,8 @@ var tnsTables = [][]float32{tnsCoef03, tnsCoef04, tnsCoef13, tnsCoef14}
 
 var (
 	tnsMaxBands1024 = []int{31, 31, 34, 40, 42, 51, 46, 46, 42, 42, 42, 39, 39}
+	tnsMaxBands512  = []int{31, 31, 31, 31, 32, 37, 31, 31, 31, 31, 31, 31, 31}
+	tnsMaxBands480  = []int{31, 31, 31, 31, 32, 37, 30, 30, 30, 30, 30, 30, 30}
 	tnsMaxBands128  = []int{9, 9, 10, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14}
 )
 
@@ -69,12 +71,21 @@ type TNS struct {
 	tmp [tnsMaxOrder]float32
 }
 
-// New creates a TNS processor for the given sample rate index.
-func New(sampleIndex int) (*TNS, error) {
+// New creates a TNS processor for the given sample rate index and frame length.
+func New(sampleIndex int, frameLength int) (*TNS, error) {
 	if sampleIndex < 0 || sampleIndex >= len(tnsMaxBands1024) {
 		return nil, fmt.Errorf("tns: invalid sample index %d", sampleIndex)
 	}
-	return &TNS{maxBands: tnsMaxBands1024[sampleIndex]}, nil
+	switch frameLength {
+	case 1024:
+		return &TNS{maxBands: tnsMaxBands1024[sampleIndex]}, nil
+	case 512:
+		return &TNS{maxBands: tnsMaxBands512[sampleIndex]}, nil
+	case 480:
+		return &TNS{maxBands: tnsMaxBands480[sampleIndex]}, nil
+	default:
+		return nil, fmt.Errorf("tns: unsupported frame length %d", frameLength)
+	}
 }
 
 // Decode reads TNS data from the bitstream for the given window info.

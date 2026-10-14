@@ -7,12 +7,12 @@
 // MDCT (IMDCT) which converts frequency-domain spectral coefficients
 // back to time-domain audio samples.
 //
-// Supported transform lengths are 2048, 256, 1920, and 240. These
-// correspond to:
-//   - 2048: Long blocks in standard AAC-LC (48000/44100 Hz)
-//   - 256:  Short blocks in standard AAC-LC
-//   - 1920: Long blocks in AAC-LD (Low Delay)
-//   - 240:  Short blocks in AAC-LD
+// Supported transform lengths are 2048, 256, 1920, 240, 1024, 128, 960, and 120.
+// These correspond to:
+//   - 2048/256: Long/short blocks in standard AAC-LC
+//   - 1920/240: Long/short blocks in AAC-LD (Low Delay)
+//   - 1024/128: Long/short blocks in AAC-ELD (512-sample frames)
+//   - 960/120:  Long/short blocks in AAC-ELD (480-sample frames)
 //
 // This is a direct port of the MDCT module from AAC.js by Devon Govett
 // (LGPL v3).
@@ -20,6 +20,7 @@ package mdct
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/skrashevich/go-aac/pkg/fft"
 	"github.com/skrashevich/go-aac/pkg/tables"
@@ -57,10 +58,11 @@ type MDCT struct {
 
 // New creates a new MDCT processor for the given transform length.
 //
-// Supported lengths are 2048, 256, 1920, and 240. These are the only sizes
-// used by the AAC decoder:
+// Supported lengths are 2048, 256, 1920, 240, 1024, 128, 960, and 120. These
+// are the only sizes used by the AAC decoder:
 //   - 2048/256 for standard AAC-LC
 //   - 1920/240 for AAC-LD (Low Delay)
+//   - 1024/128 and 960/120 for AAC-ELD
 //
 // Returns an error if an unsupported length is provided.
 func New(length int) (*MDCT, error) {
@@ -73,6 +75,7 @@ func New(length int) (*MDCT, error) {
 
 	// Select the appropriate precomputed twiddle factor table.
 	var srcTable [][2]float64
+	useGenerated := false
 	switch length {
 	case 2048:
 		srcTable = tables.MDCTTable2048
@@ -82,15 +85,21 @@ func New(length int) (*MDCT, error) {
 		srcTable = tables.MDCTTable1920
 	case 240:
 		srcTable = tables.MDCTTable240
+	case 1024, 128, 960, 120:
+		useGenerated = true
 	default:
-		return nil, fmt.Errorf("mdct: unsupported length %d (supported: 2048, 256, 1920, 240)", length)
+		return nil, fmt.Errorf("mdct: unsupported length %d (supported: 2048, 256, 1920, 240, 1024, 128, 960, 120)", length)
 	}
 
 	// Convert float64 table to float32 for faster processing.
-	m.sincos = make([][2]float32, len(srcTable))
-	for i, v := range srcTable {
-		m.sincos[i][0] = float32(v[0])
-		m.sincos[i][1] = float32(v[1])
+	if useGenerated {
+		m.sincos = generateSineCosTable(length)
+	} else {
+		m.sincos = make([][2]float32, len(srcTable))
+		for i, v := range srcTable {
+			m.sincos[i][0] = float32(v[0])
+			m.sincos[i][1] = float32(v[1])
+		}
 	}
 
 	// Create the FFT processor for N/4 points.
@@ -104,6 +113,18 @@ func New(length int) (*MDCT, error) {
 	m.buf = make([][2]float32, m.N4)
 
 	return m, nil
+}
+
+func generateSineCosTable(length int) [][2]float32 {
+	size := length >> 2
+	table := make([][2]float32, size)
+	scale := float32(math.Sqrt(2.0 / float64(length)))
+	for k := 0; k < size; k++ {
+		angle := 2.0 * math.Pi * (float64(k) + 0.125) / float64(length)
+		table[k][0] = scale * float32(math.Cos(angle))
+		table[k][1] = scale * float32(math.Sin(angle))
+	}
+	return table
 }
 
 // Length returns the transform length this MDCT was configured for.
