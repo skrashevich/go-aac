@@ -184,6 +184,9 @@ func (ics *ICStream) decodeBandTypes(stream BitReader) error {
 				}
 			}
 
+			if end <= k {
+				return fmt.Errorf("ics: empty band section")
+			}
 			if end > maxSFB {
 				return fmt.Errorf("ics: too many bands (%d > %d)", end, maxSFB)
 			}
@@ -234,7 +237,7 @@ func (ics *ICStream) decodeScaleFactors(stream BitReader) error {
 			default:
 				for ; i < runEnd; i, idx = i+1, idx+1 {
 					offset[0] += huffman.DecodeScaleFactor(stream) - sfDelta
-					if offset[0] > 255 {
+					if offset[0] < 0 || offset[0] > 255 {
 						return fmt.Errorf("ics: scalefactor out of range: %d", offset[0])
 					}
 					ics.ScaleFactors[idx] = tables.ScalefactorTable[offset[0]-100+sfOffset]
@@ -308,7 +311,7 @@ func (ics *ICStream) decodeSpectralData(stream BitReader) error {
 				for group := 0; group < groupLen; group++ {
 					energy := 0.0
 					for k := 0; k < width; k++ {
-						ics.randomState = int32(uint32(ics.randomState) * 1015568748)
+						ics.randomState = int32(uint32(ics.randomState)*1664525 + 1013904223)
 						data[off+k] = float32(ics.randomState)
 						v := float64(data[off+k])
 						energy += v * v
@@ -331,6 +334,9 @@ func (ics *ICStream) decodeSpectralData(stream BitReader) error {
 						}
 						for j := 0; j < num; j++ {
 							v := buf[j]
+							if v <= -len(tables.IQTable) || v >= len(tables.IQTable) {
+								return fmt.Errorf("ics: spectral value out of range: %d", v)
+							}
 							if v >= 0 {
 								data[off+k+j] = tables.IQTable[v]
 							} else {
@@ -417,6 +423,9 @@ func (info *ICSInfo) Decode(stream BitReader, config Config, commonWindow bool) 
 		}
 	}
 
+	if info.MaxSFB > info.SwbCount {
+		return fmt.Errorf("ics: maxSFB %d exceeds band count %d", info.MaxSFB, info.SwbCount)
+	}
 	return nil
 }
 

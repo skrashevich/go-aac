@@ -1145,3 +1145,15 @@ func TestSetASCExtensionFlagHighProfile(t *testing.T) {
 		t.Error("expected error for unsupported profile 33")
 	}
 }
+
+func TestTruncatedFrameReturnsError(t *testing.T) {
+	d := New()
+	if err := d.SetASC([]byte{0x11, 0x88}); err != nil {
+		t.Fatal(err)
+	}
+	for _, data := range [][]byte{nil, {0}, {0, 0, 0}, {0, 0, 0, 0}} {
+		if _, err := d.DecodeFrame(data); err == nil {
+			t.Fatalf("accepted truncated frame %x", data)
+		}
+	}
+}
