@@ -555,3 +555,30 @@ func BenchmarkDecodeScaleFactors(b *testing.B) {
 		_ = ics.decodeScaleFactors(br)
 	}
 }
+
+// PNS must retain nonzero noise energy after many RNG steps. The previous
+// even multiplier collapsed the state to zero and produced NaNs at 0/0.
+func TestPNSRetainsNoiseEnergy(t *testing.T) {
+	stream, err := New(Config{SampleIndex: 3, FrameLength: 1024})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream.Info.GroupCount = 1
+	stream.Info.GroupLength[0] = 1
+	stream.Info.MaxSFB = 1
+	stream.Info.SwbOffsets = []int{0, 64}
+	stream.BandTypes[0] = NoiseBT
+	stream.ScaleFactors[0] = 1
+	for range 10 {
+		if err := stream.decodeSpectralData(&bitReader{}); err != nil {
+			t.Fatal(err)
+		}
+		var energy float64
+		for _, sample := range stream.Data[:64] {
+			energy += float64(sample) * float64(sample)
+		}
+		if !(energy > 0.99 && energy < 1.01) {
+			t.Fatalf("PNS energy=%v, want 1", energy)
+		}
+	}
+}

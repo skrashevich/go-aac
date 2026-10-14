@@ -171,6 +171,9 @@ func (d *Decoder) DecodeFrame(data []byte) ([]float32, error) {
 	frameLength := config.FrameLength
 
 	for elementType := int(stream.ReadBits(3)); elementType != endElement; elementType = int(stream.ReadBits(3)) {
+		if err := stream.Error(); err != nil {
+			return nil, err
+		}
 		id := int(stream.ReadBits(4))
 		switch elementType {
 		case sceElement, lfeElement:
