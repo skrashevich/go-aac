@@ -38,8 +38,10 @@ type FilterBank struct {
 	mdctShort *mdct.MDCT
 	mdctLong  *mdct.MDCT
 
-	overlaps [][]float32
-	buf      []float32
+	overlaps  [][]float32
+	buf       []float32
+	eldWindow []float32
+	eldInput  []float32
 }
 
 var (

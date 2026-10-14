@@ -9,7 +9,7 @@ import (
 // ---------- Constructor / New ----------
 
 func TestNew_SupportedLengths(t *testing.T) {
-	for _, n := range []int{64, 512, 60, 480} {
+	for _, n := range []int{64, 512, 60, 480, 256, 240} {
 		f, err := New(n)
 		if err != nil {
 			t.Fatalf("New(%d) returned unexpected error: %v", n, err)
@@ -21,7 +21,7 @@ func TestNew_SupportedLengths(t *testing.T) {
 }
 
 func TestNew_UnsupportedLength(t *testing.T) {
-	unsupported := []int{0, 1, 2, 32, 128, 256, 1024, -1, 100}
+	unsupported := []int{0, 1, 2, 32, 128, 1024, -1, 100}
 	for _, n := range unsupported {
 		f, err := New(n)
 		if err == nil {

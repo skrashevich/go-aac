@@ -53,7 +53,7 @@ func (e *Element) Decode(stream ics.BitReader, config ics.Config) error {
 	right := e.Right
 	msUsed := e.MSUsed
 
-	e.CommonWindow = stream.ReadBits(1) != 0
+	e.CommonWindow = config.Profile == 39 || stream.ReadBits(1) != 0
 	if e.CommonWindow {
 		if err := left.Info.Decode(stream, config, true); err != nil {
 			return err
