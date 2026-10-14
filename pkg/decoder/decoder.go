@@ -16,10 +16,11 @@ import (
 )
 
 const (
-	aotAACMain = 1
-	aotAACLC   = 2
-	aotAACLTP  = 4
-	aotEscape  = 31
+	aotAACMain  = 1
+	aotAACLC    = 2
+	aotAACLTP   = 4
+	aotEscape   = 31
+	aotERAACELD = 39
 )
 
 const (
@@ -122,6 +123,12 @@ func (d *Decoder) SetASC(data []byte) error {
 			_ = stream.ReadBits(4)
 			return fmt.Errorf("decoder: PCE unimplemented")
 		}
+
+	case aotERAACELD:
+		if err := d.parseELDSpecificConfig(stream, &config); err != nil {
+			return err
+		}
+
 	default:
 		return fmt.Errorf("decoder: AAC profile %d not supported", config.Profile)
 	}
@@ -130,14 +137,76 @@ func (d *Decoder) SetASC(data []byte) error {
 		return err
 	}
 
-	filterBank, err := filterbank.New(false, config.ChanConfig)
+	var fb *filterbank.FilterBank
+	var err error
+	if config.Profile == aotERAACELD {
+		fb, err = filterbank.NewELD(config.FrameLength, config.ChanConfig)
+	} else {
+		fb, err = filterbank.New(false, config.ChanConfig)
+	}
 	if err != nil {
 		return err
 	}
 
 	d.Config = config
-	d.FilterBank = filterBank
+	d.FilterBank = fb
 	return nil
+}
+
+// parseELDSpecificConfig parses the ELD-specific configuration from the bitstream.
+// Reference: ISO/IEC 14496-3:2009, Section 4.4.2.1
+func (d *Decoder) parseELDSpecificConfig(stream *Bitstream, config *Config) error {
+	shortFrame := stream.ReadBits(1) != 0
+	if shortFrame {
+		config.FrameLength = 480
+	} else {
+		config.FrameLength = 512
+	}
+
+	// aacSectionDataResilienceFlag
+	config.SectionDataResilience = stream.ReadBits(1) != 0
+	// aacScalefactorDataResilienceFlag
+	config.ScalefactorResilience = stream.ReadBits(1) != 0
+	// aacSpectralDataResilienceFlag
+	config.SpectralDataResilience = stream.ReadBits(1) != 0
+
+	if config.SectionDataResilience || config.ScalefactorResilience || config.SpectralDataResilience {
+		return fmt.Errorf("decoder: ELD resilience tools not supported")
+	}
+	if stream.ReadBits(1) != 0 {
+		return fmt.Errorf("decoder: ELD SBR not supported")
+	}
+
+	// Parse ELD extensions
+	for {
+		eldExtType := int(stream.ReadBits(4))
+		if err := stream.Error(); err != nil {
+			return err
+		}
+		if eldExtType == 0 {
+			break
+		}
+
+		eldExtLen := int(stream.ReadBits(4))
+		if eldExtLen == 15 {
+			eldExtLen += int(stream.ReadBits(8))
+		}
+		if eldExtLen == 15+255 {
+			eldExtLen += int(stream.ReadBits(16))
+		}
+
+		// Skip extension data
+		stream.Advance(eldExtLen * 8)
+	}
+
+	if config.ChanConfig < 1 || config.ChanConfig > 2 {
+		return fmt.Errorf("decoder: ELD requires mono or stereo")
+	}
+	if stream.ReadBits(2) > 1 {
+		return fmt.Errorf("decoder: ELD epConfig not supported")
+	}
+
+	return stream.Error()
 }
 
 // DecodeFrame decodes a single AAC frame and returns interleaved PCM samples.
@@ -170,7 +239,17 @@ func (d *Decoder) DecodeFrame(data []byte) ([]float32, error) {
 	config := d.Config
 	frameLength := config.FrameLength
 
-	for elementType := int(stream.ReadBits(3)); elementType != endElement; elementType = int(stream.ReadBits(3)) {
+	elementType := endElement
+	if config.Profile == aotERAACELD {
+		var err error
+		elements, err = d.decodeERFrame(stream)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		elementType = int(stream.ReadBits(3))
+	}
+	for ; elementType != endElement; elementType = int(stream.ReadBits(3)) {
 		if err := stream.Error(); err != nil {
 			return nil, err
 		}
@@ -308,14 +387,18 @@ func (d *Decoder) processSingle(id int, element *ics.ICStream, channel int) (int
 	}
 
 	if element.TnsPresent {
-		element.ApplyTNS(data, false)
+		element.ApplyTNS(data, profile == aotERAACELD)
 	}
 
 	if err := d.applyChannelCoupling(id, false, cce.AfterTNS, data, nil); err != nil {
 		return 0, err
 	}
 
-	if err := d.FilterBank.Process(windowInfo(info), data, d.Data[channel], channel); err != nil {
+	if profile == aotERAACELD {
+		if err := d.FilterBank.ProcessELD(data, d.Data[channel], channel); err != nil {
+			return 0, err
+		}
+	} else if err := d.FilterBank.Process(windowInfo(info), data, d.Data[channel], channel); err != nil {
 		return 0, err
 	}
 
@@ -365,20 +448,28 @@ func (d *Decoder) processPair(id int, element *cpe.Element, channel int) error {
 	}
 
 	if left.TnsPresent {
-		left.ApplyTNS(lData, false)
+		left.ApplyTNS(lData, profile == aotERAACELD)
 	}
 	if right.TnsPresent {
-		right.ApplyTNS(rData, false)
+		right.ApplyTNS(rData, profile == aotERAACELD)
 	}
 
 	if err := d.applyChannelCoupling(id, true, cce.AfterTNS, lData, rData); err != nil {
 		return err
 	}
 
-	if err := d.FilterBank.Process(windowInfo(lInfo), lData, d.Data[channel], channel); err != nil {
+	if profile == aotERAACELD {
+		if err := d.FilterBank.ProcessELD(lData, d.Data[channel], channel); err != nil {
+			return err
+		}
+	} else if err := d.FilterBank.Process(windowInfo(lInfo), lData, d.Data[channel], channel); err != nil {
 		return err
 	}
-	if err := d.FilterBank.Process(windowInfo(rInfo), rData, d.Data[channel+1], channel+1); err != nil {
+	if profile == aotERAACELD {
+		if err := d.FilterBank.ProcessELD(rData, d.Data[channel+1], channel+1); err != nil {
+			return err
+		}
+	} else if err := d.FilterBank.Process(windowInfo(rInfo), rData, d.Data[channel+1], channel+1); err != nil {
 		return err
 	}
 
@@ -410,6 +501,12 @@ func (d *Decoder) processIS(element *cpe.Element, left, right []float32) {
 	sectEnd := icsRight.SectEnd
 	scaleFactors := icsRight.ScaleFactors
 
+	// groupStep: offset between windows in a group
+	groupStep := 128
+	if info.WindowSequence != ics.EightShortSequence && info.WindowCount == 1 {
+		groupStep = d.Config.FrameLength
+	}
+
 	idx := 0
 	groupOff := 0
 	for g := 0; g < windowGroups; g++ {
@@ -428,7 +525,7 @@ func (d *Decoder) processIS(element *cpe.Element, left, right []float32) {
 					}
 					scale := c * scaleFactors[idx]
 					for w := 0; w < info.GroupLength[g]; w++ {
-						off := groupOff + w*128 + offsets[i]
+						off := groupOff + w*groupStep + offsets[i]
 						length := offsets[i+1] - offsets[i]
 						for j := 0; j < length; j++ {
 							right[off+j] = left[off+j] * scale
@@ -440,7 +537,7 @@ func (d *Decoder) processIS(element *cpe.Element, left, right []float32) {
 				i = end
 			}
 		}
-		groupOff += info.GroupLength[g] * 128
+		groupOff += info.GroupLength[g] * groupStep
 	}
 }
 
@@ -453,13 +550,19 @@ func (d *Decoder) processMS(element *cpe.Element, left, right []float32) {
 	sfbCBl := icsLeft.BandTypes
 	sfbCBr := element.Right.BandTypes
 
+	// groupStep: offset between windows in a group
+	groupStep := 128
+	if info.WindowSequence != ics.EightShortSequence && info.WindowCount == 1 {
+		groupStep = d.Config.FrameLength
+	}
+
 	groupOff := 0
 	idx := 0
 	for g := 0; g < windowGroups; g++ {
 		for i := 0; i < maxSFB; i, idx = i+1, idx+1 {
 			if element.MSUsed[idx] && sfbCBl[idx] < ics.NoiseBT && sfbCBr[idx] < ics.NoiseBT {
 				for w := 0; w < info.GroupLength[g]; w++ {
-					off := groupOff + w*128 + offsets[i]
+					off := groupOff + w*groupStep + offsets[i]
 					for j := 0; j < offsets[i+1]-offsets[i]; j++ {
 						t := left[off+j] - right[off+j]
 						left[off+j] += right[off+j]
@@ -468,7 +571,7 @@ func (d *Decoder) processMS(element *cpe.Element, left, right []float32) {
 				}
 			}
 		}
-		groupOff += info.GroupLength[g] * 128
+		groupOff += info.GroupLength[g] * groupStep
 	}
 }
 
@@ -544,6 +647,43 @@ func (d *Decoder) setConfigFromADTS(header adts.Header) error {
 	d.Config = config
 	d.FilterBank = filterBank
 	return nil
+}
+
+// decodeERFrame decodes an ER (Error Resilient) AAC frame for ELD/LD profiles.
+// In ER syntax, the element structure is determined by the channel configuration,
+// not by element type IDs in the bitstream.
+func (d *Decoder) decodeERFrame(stream *Bitstream) ([]frameElement, error) {
+	elements := make([]frameElement, 0, 4)
+	config := d.icsConfig()
+
+	switch d.Config.ChanConfig {
+	case channelConfigMono:
+		// Single Channel Element
+		icsStream, err := ics.New(config)
+		if err != nil {
+			return nil, err
+		}
+		if err := icsStream.Decode(stream, config, false); err != nil {
+			return nil, err
+		}
+		elements = append(elements, frameElement{kind: elemSCE, id: 0, sce: icsStream})
+
+	case channelConfigStereo:
+		// Channel Pair Element
+		cpeElem, err := cpe.New(config)
+		if err != nil {
+			return nil, err
+		}
+		if err := cpeElem.Decode(stream, config); err != nil {
+			return nil, err
+		}
+		elements = append(elements, frameElement{kind: elemCPE, id: 0, cpe: cpeElem})
+
+	default:
+		return nil, fmt.Errorf("decoder: unsupported channel config %d for ELD", d.Config.ChanConfig)
+	}
+
+	return elements, nil
 }
 
 func (d *Decoder) icsConfig() ics.Config {

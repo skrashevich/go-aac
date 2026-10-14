@@ -20,6 +20,7 @@ package mdct
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/skrashevich/go-aac/pkg/fft"
 	"github.com/skrashevich/go-aac/pkg/tables"
@@ -72,6 +73,8 @@ func New(length int) (*MDCT, error) {
 	}
 
 	// Select the appropriate precomputed twiddle factor table.
+	// Standard AAC-LC sizes use precomputed tables for maximum precision.
+	// ELD sizes (1024, 960) generate tables on demand.
 	var srcTable [][2]float64
 	switch length {
 	case 2048:
@@ -82,8 +85,10 @@ func New(length int) (*MDCT, error) {
 		srcTable = tables.MDCTTable1920
 	case 240:
 		srcTable = tables.MDCTTable240
+	case 1024, 960:
+		srcTable = generateTable(length)
 	default:
-		return nil, fmt.Errorf("mdct: unsupported length %d (supported: 2048, 256, 1920, 240)", length)
+		return nil, fmt.Errorf("mdct: unsupported length %d (supported: 240, 256, 960, 1024, 1920, 2048)", length)
 	}
 
 	// Convert float64 table to float32 for faster processing.
@@ -206,4 +211,14 @@ func (m *MDCT) ProcessSlice(input []float32) []float32 {
 	output := make([]float32, m.N)
 	m.Process(input, 0, output, 0)
 	return output
+}
+
+func generateTable(n int) [][2]float64 {
+	table := make([][2]float64, n/4)
+	scale := math.Sqrt(2 / float64(n))
+	for k := range table {
+		angle := 2 * math.Pi * (float64(k) + 0.125) / float64(n)
+		table[k] = [2]float64{scale * math.Cos(angle), scale * math.Sin(angle)}
+	}
+	return table
 }

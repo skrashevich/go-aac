@@ -23,7 +23,7 @@ A pure Go implementation of an AAC (Advanced Audio Codec) decoder supporting ADT
 ## Features
 
 - Pure Go implementation with no external dependencies
-- Supports AAC-LC (Low Complexity) profile
+- Supports AAC-LC and AAC-ELD (512/480 samples, mono/stereo without SBR)
 - ADTS (Audio Data Transport Stream) format parsing
 - Decodes AAC frames to PCM audio
 - Full implementation of AAC decoding pipeline including:
@@ -96,6 +96,7 @@ The decoder is organized into the following packages:
 
 - AAC Main (partially)
 - AAC-LC (Low Complexity) - **recommended**
+- AAC-ELD (Enhanced Low Delay): 512/480-sample frames, mono/stereo, without SBR or resilience tools
 - AAC-LTP (Long Term Prediction) (partially)
 
 ## Limitations
@@ -109,9 +110,12 @@ The decoder is organized into the following packages:
 
 This project is licensed under the LGPL v3 license, matching the original AAC.js implementation.
 
+AAC-ELD synthesis and tables are adapted from FFmpeg, originally LGPL-2.1-or-later, and distributed here under LGPL v3. The source revision is `ec33c154fa3c5d6989b95a053c46e4c10d8aa73d` (`libavcodec/aactab.c` and `libavcodec/aac/aacdec_dsp_template.c`). Copyright notices are retained in the adapted files. No FDK-AAC code or tables are included.
+
 ## Credits
 
 - Author: Sergei Krashevich
+- AAC-ELD synthesis and tables from [FFmpeg](https://github.com/FFmpeg/FFmpeg)
 - Based on [AAC.js](https://github.com/audiocogs/aac.js) by Devon Govett and the Audiocogs team
 
 ## Contributing
