@@ -1,6 +1,10 @@
 package ics
 
-import "testing"
+import (
+	"fmt"
+	"math"
+	"testing"
+)
 
 type bitReader struct {
 	bits []uint8
@@ -579,6 +583,84 @@ func TestPNSRetainsNoiseEnergy(t *testing.T) {
 		}
 		if !(energy > 0.99 && energy < 1.01) {
 			t.Fatalf("PNS energy=%v, want 1", energy)
+		}
+	}
+}
+
+// Exercise real codebook-11 escape bits through inverse quantization, including
+// both coefficient positions and the first magnitude beyond the valid range.
+func TestDecodeSpectralDataEscapeBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		magnitude int
+		width     int
+		payload   uint32
+	}{
+		{"8190", 8190, 12, 4094},
+		{"8191", 8191, 12, 4095},
+		{"8192", 8192, 13, 0},
+	} {
+		for _, negativeIndex := range []int{0, 1} {
+			for _, boundaryIndex := range []int{0, 1} {
+				t.Run(fmt.Sprintf("%s/negative%d/boundary%d", tc.name, negativeIndex, boundaryIndex), func(t *testing.T) {
+					stream, err := New(Config{SampleIndex: 0, FrameLength: 1024})
+					if err != nil {
+						t.Fatal(err)
+					}
+					stream.Info.GroupCount = 1
+					stream.Info.GroupLength[0] = 1
+					stream.Info.MaxSFB = 1
+					stream.Info.SwbOffsets = []int{0, 2}
+					stream.Info.SwbCount = 1
+					stream.BandTypes[0] = 11
+					stream.ScaleFactors[0] = 0.5
+
+					// HCB11 code 00100 encodes (16, 16), followed by two sign bits.
+					bits := bitsFromCode(5, 4)
+					signs := []uint8{0, 0}
+					signs[negativeIndex] = 1
+					bits = append(bits, signs...)
+					values := []int{16, 16}
+					values[boundaryIndex] = tc.magnitude
+					for i := range values {
+						if i == boundaryIndex {
+							// Unary extension from width 4, stop bit, then the low width bits.
+							for n := 4; n < tc.width; n++ {
+								bits = append(bits, 1)
+							}
+							bits = append(bits, 0)
+							bits = append(bits, bitsFromCode(tc.width, tc.payload)...)
+						} else {
+							bits = append(bits, 0, 0, 0, 0, 0) // minimal escape: 16
+						}
+					}
+					values[negativeIndex] = -values[negativeIndex]
+					br := &bitReader{bits: bits}
+					err = stream.decodeSpectralData(br)
+					if tc.magnitude == 8192 {
+						want := fmt.Sprintf("ics: spectral value out of range: %d", values[boundaryIndex])
+						if err == nil || err.Error() != want {
+							t.Fatalf("got error %v, want %q", err, want)
+						}
+					} else {
+						if err != nil {
+							t.Fatalf("decodeSpectralData: %v", err)
+						}
+						for i, value := range values {
+							want := float32(math.Pow(math.Abs(float64(value)), 4.0/3.0)) * 0.5
+							if value < 0 {
+								want = -want
+							}
+							if got := stream.Data[i]; got != want {
+								t.Errorf("Data[%d] = %g, want %g", i, got, want)
+							}
+						}
+					}
+					if br.pos != len(bits) {
+						t.Errorf("consumed %d bits, want %d", br.pos, len(bits))
+					}
+				})
+			}
 		}
 	}
 }
