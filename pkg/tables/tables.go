@@ -1294,7 +1294,7 @@ var SWBLongWindowCount = []uint8{
 // scalefactor indices to their corresponding gain multipliers.
 var ScalefactorTable []float32
 
-// IQTable is an inverse quantization lookup table of 8191 float32 values.
+// IQTable is an inverse quantization lookup table for magnitudes 0 through 8191 inclusive.
 // Each entry is computed as i^(4/3), used to convert quantized spectral
 // coefficients back to their original scale during AAC decoding.
 var IQTable []float32
@@ -1305,8 +1305,8 @@ func init() {
 		ScalefactorTable[i] = float32(math.Pow(2, float64(i-200)/4))
 	}
 
-	IQTable = make([]float32, 8191)
-	for i := 0; i < 8191; i++ {
+	IQTable = make([]float32, 8192)
+	for i := 0; i < len(IQTable); i++ {
 		IQTable[i] = float32(math.Pow(float64(i), 4.0/3.0))
 	}
 }

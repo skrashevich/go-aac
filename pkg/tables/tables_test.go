@@ -416,9 +416,9 @@ func TestScalefactorTableValues(t *testing.T) {
 	}
 }
 
-// TestIQTableSize verifies that IQTable contains 8191 elements
+// TestIQTableSize verifies that IQTable contains 8192 elements
 func TestIQTableSize(t *testing.T) {
-	expected := 8191
+	expected := 8192
 	actual := len(IQTable)
 	if actual != expected {
 		t.Errorf("IQTable size mismatch: expected %d, got %d", expected, actual)
@@ -427,7 +427,7 @@ func TestIQTableSize(t *testing.T) {
 
 // TestIQTableFormula verifies that IQTable[i] == i^(4/3)
 func TestIQTableFormula(t *testing.T) {
-	testIndices := []int{0, 1, 10, 100, 500, 1000, 2000, 4000, 8000, 8190}
+	testIndices := []int{0, 1, 10, 100, 500, 1000, 2000, 4000, 8000, 8190, 8191}
 
 	for _, i := range testIndices {
 		expected := float32(math.Pow(float64(i), 4.0/3.0))
@@ -529,8 +529,8 @@ func BenchmarkScalefactorTableComputation(b *testing.B) {
 // BenchmarkIQTableComputation benchmarks the IQ table generation
 func BenchmarkIQTableComputation(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		table := make([]float32, 8191)
-		for j := 0; j < 8191; j++ {
+		table := make([]float32, len(IQTable))
+		for j := 0; j < len(table); j++ {
 			table[j] = float32(math.Pow(float64(j), 4.0/3.0))
 		}
 	}
@@ -550,7 +550,7 @@ func BenchmarkScalefactorTableLookup(b *testing.B) {
 func BenchmarkIQTableLookup(b *testing.B) {
 	var sum float32
 	for i := 0; i < b.N; i++ {
-		sum += IQTable[i%8191]
+		sum += IQTable[i%len(IQTable)]
 	}
 	// Prevent compiler optimization
 	_ = sum
